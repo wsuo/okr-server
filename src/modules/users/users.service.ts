@@ -144,4 +144,18 @@ export class UsersService {
     user.status = user.status === 1 ? 0 : 1;
     return this.usersRepository.save(user);
   }
+
+  async getLeaders(): Promise<{ data: User[] }> {
+    const leaders = await this.usersRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.department', 'department')
+      .leftJoinAndSelect('user.roles', 'roles')
+      .where('user.deleted_at IS NULL')
+      .andWhere('user.status = 1')
+      .andWhere('roles.code IN (:...codes)', { codes: ['leader', 'boss'] })
+      .orderBy('user.created_at', 'ASC')
+      .getMany();
+
+    return { data: leaders };
+  }
 }

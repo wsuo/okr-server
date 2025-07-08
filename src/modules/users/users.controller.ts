@@ -107,4 +107,12 @@ export class UsersController {
   toggleStatus(@Param('id') id: string) {
     return this.usersService.toggleStatus(+id);
   }
+
+  @ApiOperation({ summary: '获取领导用户列表' })
+  @ApiResponse({ status: 200, description: '获取成功', type: UserListResponseDto })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @Get('leaders/list')
+  getLeaders() {
+    return this.usersService.getLeaders();
+  }
 }
