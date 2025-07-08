@@ -25,7 +25,7 @@ export class TemplatesService {
     const queryBuilder = this.templatesRepository
       .createQueryBuilder('template')
       .leftJoinAndSelect('template.creator', 'creator')
-      .where('1=1');
+      .where('template.deleted_at IS NULL');
 
     if (name) {
       queryBuilder.andWhere('template.name LIKE :name', { name: `%${name}%` });
@@ -56,6 +56,7 @@ export class TemplatesService {
       queryBuilder.getMany(),
       this.templatesRepository.count({
         where: {
+          deleted_at: null,
           ...(name && { name: Like(`%${name}%`) }),
           ...(type && { type }),
           ...(status !== undefined && { status }),
@@ -78,7 +79,7 @@ export class TemplatesService {
 
   async findOne(id: number): Promise<Template> {
     const template = await this.templatesRepository.findOne({
-      where: { id },
+      where: { id, deleted_at: null },
       relations: ['creator'],
     });
 
@@ -103,7 +104,7 @@ export class TemplatesService {
 
       // 检查模板名称是否已存在
       const existingTemplate = await this.templatesRepository.findOne({
-        where: { name: createTemplateDto.name },
+        where: { name: createTemplateDto.name, deleted_at: null },
       });
       if (existingTemplate) {
         throw new ConflictException('模板名称已存在');
@@ -112,7 +113,7 @@ export class TemplatesService {
       // 如果设为默认模板，需要先取消其他同类型的默认模板
       if (createTemplateDto.is_default) {
         await this.templatesRepository.update(
-          { type: createTemplateDto.type, is_default: 1 },
+          { type: createTemplateDto.type, is_default: 1, deleted_at: null },
           { is_default: 0 }
         );
       }
@@ -147,7 +148,7 @@ export class TemplatesService {
       // 检查模板名称是否已存在（排除当前模板）
       if (updateTemplateDto.name && updateTemplateDto.name !== template.name) {
         const existingTemplate = await this.templatesRepository.findOne({
-          where: { name: updateTemplateDto.name },
+          where: { name: updateTemplateDto.name, deleted_at: null },
         });
         if (existingTemplate) {
           throw new ConflictException('模板名称已存在');
@@ -158,7 +159,7 @@ export class TemplatesService {
       if (updateTemplateDto.is_default) {
         const type = updateTemplateDto.type || template.type;
         await this.templatesRepository.update(
-          { type, is_default: 1 },
+          { type, is_default: 1, deleted_at: null },
           { is_default: 0 }
         );
       }
@@ -206,7 +207,7 @@ export class TemplatesService {
 
       // 检查新模板名称是否已存在
       const existingTemplate = await this.templatesRepository.findOne({
-        where: { name: cloneTemplateDto.name },
+        where: { name: cloneTemplateDto.name, deleted_at: null },
       });
       if (existingTemplate) {
         throw new ConflictException('模板名称已存在');
@@ -215,7 +216,7 @@ export class TemplatesService {
       // 如果设为默认模板，需要先取消其他同类型的默认模板
       if (cloneTemplateDto.is_default) {
         await this.templatesRepository.update(
-          { type: originalTemplate.type, is_default: 1 },
+          { type: originalTemplate.type, is_default: 1, deleted_at: null },
           { is_default: 0 }
         );
       }
@@ -243,7 +244,7 @@ export class TemplatesService {
   }
 
   async getDefaultTemplates(type?: string) {
-    const where: any = { is_default: 1 };
+    const where: any = { is_default: 1, deleted_at: null };
     if (type) {
       where.type = type;
     }
@@ -265,7 +266,7 @@ export class TemplatesService {
 
       // 取消同类型的其他默认模板
       await this.templatesRepository.update(
-        { type: template.type, is_default: 1 },
+        { type: template.type, is_default: 1, deleted_at: null },
         { is_default: 0 }
       );
 
@@ -284,7 +285,7 @@ export class TemplatesService {
 
   async getTemplatesByType(type: string) {
     return this.templatesRepository.find({
-      where: { type, status: 1 },
+      where: { type, status: 1, deleted_at: null },
       relations: ['creator'],
       order: { is_default: 'DESC', created_at: 'DESC' },
     });
