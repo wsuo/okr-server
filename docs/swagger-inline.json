@@ -2234,6 +2234,132 @@
       }
     },
     "/departments": {
+      "post": {
+        "operationId": "DepartmentsController_create",
+        "summary": "创建部门",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "部门名称",
+                    "example": "技术部"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "部门描述",
+                    "example": "负责技术研发工作"
+                  },
+                  "parent_id": {
+                    "type": "number",
+                    "description": "父部门ID",
+                    "example": 1
+                  },
+                  "sort_order": {
+                    "type": "number",
+                    "description": "排序",
+                    "example": 0
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number",
+                      "description": "部门ID",
+                      "example": 1
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "部门名称",
+                      "example": "技术部"
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "部门描述",
+                      "example": "负责技术研发工作"
+                    },
+                    "parent_id": {
+                      "type": "number",
+                      "description": "父部门ID",
+                      "example": 1
+                    },
+                    "sort_order": {
+                      "type": "number",
+                      "description": "排序",
+                      "example": 0
+                    },
+                    "status": {
+                      "type": "number",
+                      "description": "状态",
+                      "example": 1
+                    },
+                    "employeeCount": {
+                      "type": "number",
+                      "description": "员工数量",
+                      "example": 10
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "创建时间",
+                      "example": "2023-01-01T00:00:00Z"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "更新时间",
+                      "example": "2023-01-01T00:00:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "sort_order",
+                    "status",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未授权"
+          },
+          "403": {
+            "description": "无权限"
+          }
+        },
+        "tags": [
+          "部门管理"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
       "get": {
         "operationId": "DepartmentsController_findAll",
         "summary": "获取部门列表",
@@ -2416,6 +2542,206 @@
           },
           "401": {
             "description": "未授权"
+          },
+          "404": {
+            "description": "部门不存在"
+          }
+        },
+        "tags": [
+          "部门管理"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "DepartmentsController_update",
+        "summary": "更新部门信息",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "部门名称",
+                    "example": "技术部"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "部门描述",
+                    "example": "负责技术研发工作"
+                  },
+                  "parent_id": {
+                    "type": "number",
+                    "description": "父部门ID",
+                    "example": 1
+                  },
+                  "sort_order": {
+                    "type": "number",
+                    "description": "排序",
+                    "example": 0
+                  },
+                  "status": {
+                    "type": "number",
+                    "description": "部门状态",
+                    "example": 1,
+                    "enum": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number",
+                      "description": "部门ID",
+                      "example": 1
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "部门名称",
+                      "example": "技术部"
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "部门描述",
+                      "example": "负责技术研发工作"
+                    },
+                    "parent_id": {
+                      "type": "number",
+                      "description": "父部门ID",
+                      "example": 1
+                    },
+                    "sort_order": {
+                      "type": "number",
+                      "description": "排序",
+                      "example": 0
+                    },
+                    "status": {
+                      "type": "number",
+                      "description": "状态",
+                      "example": 1
+                    },
+                    "employeeCount": {
+                      "type": "number",
+                      "description": "员工数量",
+                      "example": 10
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "创建时间",
+                      "example": "2023-01-01T00:00:00Z"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "更新时间",
+                      "example": "2023-01-01T00:00:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "sort_order",
+                    "status",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未授权"
+          },
+          "403": {
+            "description": "无权限"
+          },
+          "404": {
+            "description": "部门不存在"
+          }
+        },
+        "tags": [
+          "部门管理"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "DepartmentsController_remove",
+        "summary": "删除部门",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "description": "消息内容",
+                      "example": "操作成功"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "部门下有子部门或员工，无法删除"
+          },
+          "401": {
+            "description": "未授权"
+          },
+          "403": {
+            "description": "无权限"
           },
           "404": {
             "description": "部门不存在"
@@ -5449,6 +5775,34 @@
           "password"
         ]
       },
+      "CreateDepartmentDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "部门名称",
+            "example": "技术部"
+          },
+          "description": {
+            "type": "string",
+            "description": "部门描述",
+            "example": "负责技术研发工作"
+          },
+          "parent_id": {
+            "type": "number",
+            "description": "父部门ID",
+            "example": 1
+          },
+          "sort_order": {
+            "type": "number",
+            "description": "排序",
+            "example": 0
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
       "DepartmentListResponseDto": {
         "type": "object",
         "properties": {
@@ -5463,6 +5817,40 @@
         "required": [
           "data"
         ]
+      },
+      "UpdateDepartmentDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "部门名称",
+            "example": "技术部"
+          },
+          "description": {
+            "type": "string",
+            "description": "部门描述",
+            "example": "负责技术研发工作"
+          },
+          "parent_id": {
+            "type": "number",
+            "description": "父部门ID",
+            "example": 1
+          },
+          "sort_order": {
+            "type": "number",
+            "description": "排序",
+            "example": 0
+          },
+          "status": {
+            "type": "number",
+            "description": "部门状态",
+            "example": 1,
+            "enum": [
+              0,
+              1
+            ]
+          }
+        }
       },
       "RoleListResponseDto": {
         "type": "object",

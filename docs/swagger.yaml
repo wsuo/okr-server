@@ -318,6 +318,33 @@ paths:
       tags: *ref_1
       security: *ref_2
   /departments:
+    post:
+      operationId: DepartmentsController_create
+      summary: 创建部门
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentDto'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponseDto'
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+      tags: &ref_3
+        - 部门管理
+      security: &ref_4
+        - bearer: []
     get:
       operationId: DepartmentsController_findAll
       summary: 获取部门列表
@@ -331,10 +358,8 @@ paths:
                 $ref: '#/components/schemas/DepartmentListResponseDto'
         '401':
           description: 未授权
-      tags: &ref_3
-        - 部门管理
-      security: &ref_4
-        - bearer: []
+      tags: *ref_3
+      security: *ref_4
   /departments/{id}:
     get:
       operationId: DepartmentsController_findOne
@@ -354,6 +379,64 @@ paths:
                 $ref: '#/components/schemas/DepartmentResponseDto'
         '401':
           description: 未授权
+        '404':
+          description: 部门不存在
+      tags: *ref_3
+      security: *ref_4
+    patch:
+      operationId: DepartmentsController_update
+      summary: 更新部门信息
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDepartmentDto'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponseDto'
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+        '404':
+          description: 部门不存在
+      tags: *ref_3
+      security: *ref_4
+    delete:
+      operationId: DepartmentsController_remove
+      summary: 删除部门
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '400':
+          description: 部门下有子部门或员工，无法删除
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
         '404':
           description: 部门不存在
       tags: *ref_3
@@ -1905,6 +1988,27 @@ components:
           example: newpassword
       required:
         - password
+    CreateDepartmentDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 部门名称
+          example: 技术部
+        description:
+          type: string
+          description: 部门描述
+          example: 负责技术研发工作
+        parent_id:
+          type: number
+          description: 父部门ID
+          example: 1
+        sort_order:
+          type: number
+          description: 排序
+          example: 0
+      required:
+        - name
     DepartmentListResponseDto:
       type: object
       properties:
@@ -1915,6 +2019,32 @@ components:
             $ref: '#/components/schemas/DepartmentResponseDto'
       required:
         - data
+    UpdateDepartmentDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 部门名称
+          example: 技术部
+        description:
+          type: string
+          description: 部门描述
+          example: 负责技术研发工作
+        parent_id:
+          type: number
+          description: 父部门ID
+          example: 1
+        sort_order:
+          type: number
+          description: 排序
+          example: 0
+        status:
+          type: number
+          description: 部门状态
+          example: 1
+          enum:
+            - 0
+            - 1
     RoleListResponseDto:
       type: object
       properties:
