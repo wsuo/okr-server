@@ -51,6 +51,12 @@ export class User {
   @Column({ length: 100, nullable: true })
   position: string;
 
+  @Column({ nullable: true })
+  department_id: number;
+
+  @Column({ nullable: true })
+  leader_id: number;
+
   @CreateDateColumn()
   created_at: Date;
 

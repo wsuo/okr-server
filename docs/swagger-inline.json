@@ -2957,6 +2957,106 @@
         ]
       }
     },
+    "/roles/leaders/list": {
+      "get": {
+        "operationId": "RolesController_getLeaders",
+        "summary": "获取领导角色列表",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "description": "角色列表",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number",
+                            "description": "角色ID",
+                            "example": 1
+                          },
+                          "code": {
+                            "type": "string",
+                            "description": "角色代码",
+                            "example": "admin"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "角色名称",
+                            "example": "系统管理员"
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "角色描述",
+                            "example": "系统管理员角色"
+                          },
+                          "permissions": {
+                            "description": "权限列表",
+                            "example": [
+                              "user:read",
+                              "user:write"
+                            ],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "status": {
+                            "type": "number",
+                            "description": "状态",
+                            "example": 1
+                          },
+                          "created_at": {
+                            "format": "date-time",
+                            "type": "string",
+                            "description": "创建时间",
+                            "example": "2023-01-01T00:00:00Z"
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": "string",
+                            "description": "更新时间",
+                            "example": "2023-01-01T00:00:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "code",
+                          "name",
+                          "status",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未授权"
+          }
+        },
+        "tags": [
+          "角色管理"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/assessments": {
       "get": {
         "operationId": "AssessmentsController_findAll",

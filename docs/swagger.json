@@ -833,6 +833,36 @@
         ]
       }
     },
+    "/roles/leaders/list": {
+      "get": {
+        "operationId": "RolesController_getLeaders",
+        "summary": "获取领导角色列表",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未授权"
+          }
+        },
+        "tags": [
+          "角色管理"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/assessments": {
       "get": {
         "operationId": "AssessmentsController_findAll",
