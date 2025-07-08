@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "disableBypassPermissionsMode": false,
+    "allow": [
+      "*",
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "LS(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Task(*)",
+      "TodoRead(*)",
+      "TodoWrite(*)",
+      "NotebookRead(*)",
+      "NotebookEdit(*)",
+      "mcp__ide__getDiagnostics(*)",
+      "mcp__ide__executeCode(*)",
+      "exit_plan_mode(*)"
+    ],
+    "deny": [],
+    "additionalDirectories": [
+      "../",
+      "../../",
+      "../../../",
+      "/Users/wshuo/",
+      "/Users/wshuo/Developer/",
+      "/tmp/",
+      "/var/"
+    ],
+    "autoApprove": true,
+    "alwaysAllow": true
+  },
+  "defaultMode": "bypassPermissions"
+}
