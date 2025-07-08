@@ -18,6 +18,7 @@ import { OkrsModule } from './modules/okrs/okrs.module';
 import { EvaluationsModule } from './modules/evaluations/evaluations.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { StatisticsModule } from './modules/statistics/statistics.module';
+import { SeedModule } from './database/seeds/seed.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { StatisticsModule } from './modules/statistics/statistics.module';
     EvaluationsModule,
     TemplatesModule,
     StatisticsModule,
+    SeedModule,
   ],
 })
 export class AppModule {}

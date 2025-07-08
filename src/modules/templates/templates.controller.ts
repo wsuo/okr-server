@@ -48,6 +48,22 @@ export class TemplatesController {
     return this.templatesService.getTemplatesByType(type);
   }
 
+  @Get(':id/config')
+  @ApiOperation({ summary: '获取模板详细配置' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @ApiResponse({ status: 404, description: '模板不存在' })
+  getTemplateConfig(@Param('id') id: string) {
+    return this.templatesService.getTemplateConfig(+id);
+  }
+
+  @Get(':id/preview')
+  @ApiOperation({ summary: '预览模板结构' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @ApiResponse({ status: 404, description: '模板不存在' })
+  previewTemplate(@Param('id') id: string) {
+    return this.templatesService.previewTemplate(+id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取模板详情' })
   @ApiResponse({ status: 200, description: '获取成功' })

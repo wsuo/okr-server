@@ -289,4 +289,98 @@ export class TemplatesService {
       order: { is_default: 'DESC', created_at: 'DESC' },
     });
   }
+
+  async getTemplateConfig(id: number) {
+    const template = await this.findOne(id);
+    
+    return {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      type: template.type,
+      config: template.config,
+      is_default: template.is_default,
+      created_at: template.created_at,
+      creator: template.creator
+    };
+  }
+
+  async previewTemplate(id: number) {
+    const template = await this.findOne(id);
+    const config = template.config;
+
+    // 生成模板预览结构
+    const preview = {
+      template_info: {
+        id: template.id,
+        name: template.name,
+        type: template.type,
+        total_score: config.total_score || 100
+      },
+      structure: {
+        categories: config.categories?.map(category => ({
+          id: category.id,
+          name: category.name,
+          weight: category.weight,
+          evaluator_types: category.evaluator_types,
+          special_attributes: category.special_attributes || null,
+          items_count: category.items?.length || 0,
+          items: category.items?.map(item => ({
+            id: item.id,
+            name: item.name,
+            weight: item.weight,
+            max_score: item.max_score
+          })) || []
+        })) || []
+      },
+      scoring_summary: {
+        method: config.scoring_method || 'weighted',
+        self_weight: config.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
+        leader_weight: config.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
+        calculation: config.scoring_rules?.calculation_method || 'weighted_average'
+      },
+      usage_notes: config.usage_instructions || {}
+    };
+
+    return preview;
+  }
+
+  async validateTemplateStructure(config: any): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    // 验证基本结构
+    if (!config.categories || !Array.isArray(config.categories)) {
+      errors.push('模板必须包含categories数组');
+      return { valid: false, errors };
+    }
+
+    // 验证权重总和
+    const totalCategoryWeight = config.categories.reduce((sum, cat) => sum + (cat.weight || 0), 0);
+    if (Math.abs(totalCategoryWeight - 100) > 0.01) {
+      errors.push(`考核大项权重总和必须为100%，当前为${totalCategoryWeight}%`);
+    }
+
+    // 验证每个大项的子项权重
+    for (const category of config.categories) {
+      if (category.items && Array.isArray(category.items)) {
+        const itemsWeight = category.items.reduce((sum, item) => sum + (item.weight || 0), 0);
+        if (Math.abs(itemsWeight - 100) > 0.01) {
+          errors.push(`"${category.name}"下子项权重总和必须为100%，当前为${itemsWeight}%`);
+        }
+      }
+    }
+
+    // 验证评分规则
+    if (config.scoring_rules) {
+      const selfWeight = config.scoring_rules.self_evaluation?.weight_in_final || 0;
+      const leaderWeight = config.scoring_rules.leader_evaluation?.weight_in_final || 0;
+      const totalWeight = selfWeight + leaderWeight;
+      
+      if (Math.abs(totalWeight - 1.0) > 0.01) {
+        errors.push(`自评和领导评价权重总和必须为1.0，当前为${totalWeight}`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
 }
