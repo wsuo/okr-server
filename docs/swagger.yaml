@@ -1,0 +1,2276 @@
+openapi: 3.0.0
+paths:
+  /auth/login:
+    post:
+      operationId: AuthController_login
+      summary: 用户登录
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseDto'
+        '401':
+          description: 用户名或密码错误
+      tags: &ref_0
+        - 认证授权
+  /auth/refresh:
+    post:
+      operationId: AuthController_refresh
+      summary: 刷新令牌
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenDto'
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponseDto'
+        '401':
+          description: 刷新令牌无效
+      tags: *ref_0
+  /auth/logout:
+    post:
+      operationId: AuthController_logout
+      summary: 用户登出
+      parameters: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '401':
+          description: 未授权
+      tags: *ref_0
+      security:
+        - bearer: []
+  /auth/profile:
+    get:
+      operationId: AuthController_getProfile
+      summary: 获取当前用户信息
+      parameters: []
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '401':
+          description: 未授权
+      tags: *ref_0
+      security:
+        - bearer: []
+  /auth/password:
+    post:
+      operationId: AuthController_changePassword
+      summary: 修改密码
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordDto'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '400':
+          description: 原密码错误
+        '401':
+          description: 未授权
+      tags: *ref_0
+      security:
+        - bearer: []
+  /users:
+    post:
+      operationId: UsersController_create
+      summary: 创建用户
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserDto'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+      tags: &ref_1
+        - 用户管理
+      security: &ref_2
+        - bearer: []
+    get:
+      operationId: UsersController_findAll
+      summary: 获取用户列表
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: 页码
+          schema:
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: 每页数量
+          schema:
+            example: 10
+            type: number
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            example: 1
+            type: number
+        - name: role
+          required: false
+          in: query
+          description: 角色
+          schema:
+            example: employee
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: 搜索关键词
+          schema:
+            example: 张三
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponseDto'
+        '401':
+          description: 未授权
+      tags: *ref_1
+      security: *ref_2
+  /users/{id}:
+    get:
+      operationId: UsersController_findOne
+      summary: 获取用户详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '401':
+          description: 未授权
+        '404':
+          description: 用户不存在
+      tags: *ref_1
+      security: *ref_2
+    patch:
+      operationId: UsersController_update
+      summary: 更新用户信息
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserDto'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+        '404':
+          description: 用户不存在
+      tags: *ref_1
+      security: *ref_2
+    delete:
+      operationId: UsersController_remove
+      summary: 删除用户
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+        '404':
+          description: 用户不存在
+      tags: *ref_1
+      security: *ref_2
+  /users/{id}/reset-password:
+    post:
+      operationId: UsersController_resetPassword
+      summary: 重置用户密码
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordDto'
+      responses:
+        '200':
+          description: 重置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+        '404':
+          description: 用户不存在
+      tags: *ref_1
+      security: *ref_2
+  /users/{id}/toggle-status:
+    post:
+      operationId: UsersController_toggleStatus
+      summary: 切换用户状态
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 切换成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponseDto'
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限
+        '404':
+          description: 用户不存在
+      tags: *ref_1
+      security: *ref_2
+  /departments:
+    get:
+      operationId: DepartmentsController_findAll
+      summary: 获取部门列表
+      parameters: []
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentListResponseDto'
+        '401':
+          description: 未授权
+      tags: &ref_3
+        - 部门管理
+      security: &ref_4
+        - bearer: []
+  /departments/{id}:
+    get:
+      operationId: DepartmentsController_findOne
+      summary: 获取部门详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponseDto'
+        '401':
+          description: 未授权
+        '404':
+          description: 部门不存在
+      tags: *ref_3
+      security: *ref_4
+  /roles:
+    get:
+      operationId: RolesController_findAll
+      summary: 获取角色列表
+      parameters: []
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListResponseDto'
+        '401':
+          description: 未授权
+      tags: &ref_5
+        - 角色管理
+      security: &ref_6
+        - bearer: []
+  /roles/{id}:
+    get:
+      operationId: RolesController_findOne
+      summary: 获取角色详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponseDto'
+        '401':
+          description: 未授权
+        '404':
+          description: 角色不存在
+      tags: *ref_5
+      security: *ref_6
+  /assessments:
+    get:
+      operationId: AssessmentsController_findAll
+      summary: 获取考核列表
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: 页码
+          schema:
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: 每页数量
+          schema:
+            example: 10
+            type: number
+        - name: status
+          required: false
+          in: query
+          description: 考核状态
+          schema:
+            enum:
+              - draft
+              - active
+              - completed
+              - ended
+            type: string
+        - name: period
+          required: false
+          in: query
+          description: 考核周期
+          schema:
+            example: 2025-07
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: 搜索关键词
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: &ref_7
+        - 考核管理
+      security: &ref_8
+        - bearer: []
+    post:
+      operationId: AssessmentsController_create
+      summary: 创建考核
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssessmentDto'
+      responses:
+        '201':
+          description: 创建成功
+        '400':
+          description: 参数错误
+      tags: *ref_7
+      security: *ref_8
+  /assessments/{id}:
+    get:
+      operationId: AssessmentsController_findOne
+      summary: 获取考核详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: 考核不存在
+      tags: *ref_7
+      security: *ref_8
+    put:
+      operationId: AssessmentsController_update
+      summary: 更新考核
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAssessmentDto'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: 考核不存在
+      tags: *ref_7
+      security: *ref_8
+    delete:
+      operationId: AssessmentsController_remove
+      summary: 删除考核
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '400':
+          description: 无法删除进行中的考核
+        '404':
+          description: 考核不存在
+      tags: *ref_7
+      security: *ref_8
+  /assessments/{id}/end:
+    post:
+      operationId: AssessmentsController_endAssessment
+      summary: 结束考核
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 结束成功
+        '400':
+          description: 只能结束进行中的考核
+        '404':
+          description: 考核不存在
+      tags: *ref_7
+      security: *ref_8
+  /okrs:
+    get:
+      operationId: OkrsController_findAll
+      summary: 获取OKR列表
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: 页码
+          schema:
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: 每页数量
+          schema:
+            example: 10
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: status
+          required: false
+          in: query
+          description: OKR状态
+          schema:
+            enum:
+              - active
+              - completed
+              - cancelled
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: 搜索关键词
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: &ref_9
+        - OKR管理
+      security: &ref_10
+        - bearer: []
+    post:
+      operationId: OkrsController_create
+      summary: 创建OKR
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOkrDto'
+      responses:
+        '201':
+          description: 创建成功
+        '400':
+          description: 参数错误
+      tags: *ref_9
+      security: *ref_10
+  /okrs/my:
+    get:
+      operationId: OkrsController_getMyOkrs
+      summary: 获取我的OKR列表
+      parameters:
+        - name: assessment_id
+          required: true
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_9
+      security: *ref_10
+  /okrs/{id}:
+    get:
+      operationId: OkrsController_findOne
+      summary: 获取OKR详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: OKR不存在
+      tags: *ref_9
+      security: *ref_10
+    put:
+      operationId: OkrsController_update
+      summary: 更新OKR
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOkrDto'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: OKR不存在
+      tags: *ref_9
+      security: *ref_10
+    delete:
+      operationId: OkrsController_remove
+      summary: 删除OKR
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '400':
+          description: 无法删除已完成的OKR
+        '404':
+          description: OKR不存在
+      tags: *ref_9
+      security: *ref_10
+  /okrs/{okrId}/key-results/{keyResultId}:
+    put:
+      operationId: OkrsController_updateKeyResult
+      summary: 更新关键结果
+      parameters:
+        - name: okrId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: keyResultId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyResultDto'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: 关键结果不存在
+      tags: *ref_9
+      security: *ref_10
+  /evaluations:
+    get:
+      operationId: EvaluationsController_findAll
+      summary: 获取评估列表
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: 页码
+          schema:
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: 每页数量
+          schema:
+            example: 10
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: evaluatee_id
+          required: false
+          in: query
+          description: 被评估人ID
+          schema:
+            type: number
+        - name: evaluator_id
+          required: false
+          in: query
+          description: 评估人ID
+          schema:
+            type: number
+        - name: type
+          required: false
+          in: query
+          description: 评估类型
+          schema:
+            enum:
+              - self
+              - leader
+              - peer
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: 评估状态
+          schema:
+            enum:
+              - draft
+              - submitted
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: &ref_11
+        - 评估管理
+      security: &ref_12
+        - bearer: []
+  /evaluations/my:
+    get:
+      operationId: EvaluationsController_getMyEvaluations
+      summary: 获取我的评估记录
+      parameters:
+        - name: assessment_id
+          required: true
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_11
+      security: *ref_12
+  /evaluations/to-give:
+    get:
+      operationId: EvaluationsController_getEvaluationsToGive
+      summary: 获取需要我评分的评估
+      parameters:
+        - name: assessment_id
+          required: true
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_11
+      security: *ref_12
+  /evaluations/{id}:
+    get:
+      operationId: EvaluationsController_findOne
+      summary: 获取评估详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: 评估记录不存在
+      tags: *ref_11
+      security: *ref_12
+    put:
+      operationId: EvaluationsController_update
+      summary: 更新评估
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEvaluationDto'
+      responses:
+        '200':
+          description: 更新成功
+        '400':
+          description: 已提交的评估无法修改
+        '404':
+          description: 评估记录不存在
+      tags: *ref_11
+      security: *ref_12
+    delete:
+      operationId: EvaluationsController_remove
+      summary: 删除评估
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '400':
+          description: 已提交的评估无法删除
+        '404':
+          description: 评估记录不存在
+      tags: *ref_11
+      security: *ref_12
+  /evaluations/self:
+    post:
+      operationId: EvaluationsController_createSelfEvaluation
+      summary: 提交自评
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSelfEvaluationDto'
+      responses:
+        '201':
+          description: 提交成功
+        '400':
+          description: 参数错误或业务规则错误
+      tags: *ref_11
+      security: *ref_12
+  /evaluations/leader:
+    post:
+      operationId: EvaluationsController_createLeaderEvaluation
+      summary: 提交领导评分
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeaderEvaluationDto'
+      responses:
+        '201':
+          description: 提交成功
+        '400':
+          description: 参数错误或业务规则错误
+      tags: *ref_11
+      security: *ref_12
+  /templates:
+    get:
+      operationId: TemplatesController_findAll
+      summary: 获取模板列表
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: 页码
+          schema:
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: 每页数量
+          schema:
+            example: 10
+            type: number
+        - name: name
+          required: false
+          in: query
+          description: 模板名称
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: 模板类型
+          schema:
+            enum:
+              - okr
+              - assessment
+              - evaluation
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: 模板状态
+          schema:
+            enum:
+              - 0
+              - 1
+            type: number
+        - name: is_default
+          required: false
+          in: query
+          description: 是否默认模板
+          schema:
+            enum:
+              - 0
+              - 1
+            type: number
+        - name: created_by
+          required: false
+          in: query
+          description: 创建者ID
+          schema:
+            type: number
+      responses:
+        '200':
+          description: 获取成功
+      tags: &ref_13
+        - 模板管理
+      security: &ref_14
+        - bearer: []
+    post:
+      operationId: TemplatesController_create
+      summary: 创建模板
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateDto'
+      responses:
+        '201':
+          description: 创建成功
+        '400':
+          description: 参数错误
+        '409':
+          description: 模板名称已存在
+      tags: *ref_13
+      security: *ref_14
+  /templates/defaults:
+    get:
+      operationId: TemplatesController_getDefaultTemplates
+      summary: 获取默认模板
+      parameters:
+        - name: type
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_13
+      security: *ref_14
+  /templates/type/{type}:
+    get:
+      operationId: TemplatesController_getTemplatesByType
+      summary: 根据类型获取模板
+      parameters:
+        - name: type
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_13
+      security: *ref_14
+  /templates/{id}/config:
+    get:
+      operationId: TemplatesController_getTemplateConfig
+      summary: 获取模板详细配置
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: 模板不存在
+      tags: *ref_13
+      security: *ref_14
+  /templates/{id}/preview:
+    get:
+      operationId: TemplatesController_previewTemplate
+      summary: 预览模板结构
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: 模板不存在
+      tags: *ref_13
+      security: *ref_14
+  /templates/{id}:
+    get:
+      operationId: TemplatesController_findOne
+      summary: 获取模板详情
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+        '404':
+          description: 模板不存在
+      tags: *ref_13
+      security: *ref_14
+    put:
+      operationId: TemplatesController_update
+      summary: 更新模板
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateDto'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: 模板不存在
+        '409':
+          description: 模板名称已存在
+      tags: *ref_13
+      security: *ref_14
+    delete:
+      operationId: TemplatesController_remove
+      summary: 删除模板
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '400':
+          description: 模板正在被使用，无法删除
+        '404':
+          description: 模板不存在
+      tags: *ref_13
+      security: *ref_14
+  /templates/{id}/clone:
+    post:
+      operationId: TemplatesController_clone
+      summary: 克隆模板
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneTemplateDto'
+      responses:
+        '201':
+          description: 克隆成功
+        '404':
+          description: 原模板不存在
+        '409':
+          description: 模板名称已存在
+      tags: *ref_13
+      security: *ref_14
+  /templates/{id}/default:
+    put:
+      operationId: TemplatesController_setDefault
+      summary: 设置为默认模板
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 设置成功
+        '404':
+          description: 模板不存在
+      tags: *ref_13
+      security: *ref_14
+  /statistics/dashboard:
+    get:
+      operationId: StatisticsController_getDashboard
+      summary: 获取仪表板统计数据
+      parameters: []
+      responses:
+        '200':
+          description: 获取成功
+      tags: &ref_15
+        - 统计分析
+      security: &ref_16
+        - bearer: []
+  /statistics/assessments:
+    get:
+      operationId: StatisticsController_getAssessmentStatistics
+      summary: 获取考核统计数据
+      parameters:
+        - name: start_date
+          required: false
+          in: query
+          description: 开始日期
+          schema:
+            example: '2024-01-01'
+            type: string
+        - name: end_date
+          required: false
+          in: query
+          description: 结束日期
+          schema:
+            example: '2024-12-31'
+            type: string
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: time_dimension
+          required: false
+          in: query
+          description: 时间维度
+          schema:
+            enum:
+              - day
+              - week
+              - month
+              - quarter
+              - year
+            type: string
+        - name: group_by
+          required: false
+          in: query
+          description: 分组维度
+          schema:
+            enum:
+              - department
+              - user
+              - assessment
+              - time
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+  /statistics/users:
+    get:
+      operationId: StatisticsController_getUserStatistics
+      summary: 获取用户统计数据
+      parameters:
+        - name: start_date
+          required: false
+          in: query
+          description: 开始日期
+          schema:
+            example: '2024-01-01'
+            type: string
+        - name: end_date
+          required: false
+          in: query
+          description: 结束日期
+          schema:
+            example: '2024-12-31'
+            type: string
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: time_dimension
+          required: false
+          in: query
+          description: 时间维度
+          schema:
+            enum:
+              - day
+              - week
+              - month
+              - quarter
+              - year
+            type: string
+        - name: group_by
+          required: false
+          in: query
+          description: 分组维度
+          schema:
+            enum:
+              - department
+              - user
+              - assessment
+              - time
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+  /statistics/departments:
+    get:
+      operationId: StatisticsController_getDepartmentStatistics
+      summary: 获取部门统计数据
+      parameters: []
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+  /statistics/okrs:
+    get:
+      operationId: StatisticsController_getOkrStatistics
+      summary: 获取OKR统计数据
+      parameters:
+        - name: start_date
+          required: false
+          in: query
+          description: 开始日期
+          schema:
+            example: '2024-01-01'
+            type: string
+        - name: end_date
+          required: false
+          in: query
+          description: 结束日期
+          schema:
+            example: '2024-12-31'
+            type: string
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: time_dimension
+          required: false
+          in: query
+          description: 时间维度
+          schema:
+            enum:
+              - day
+              - week
+              - month
+              - quarter
+              - year
+            type: string
+        - name: group_by
+          required: false
+          in: query
+          description: 分组维度
+          schema:
+            enum:
+              - department
+              - user
+              - assessment
+              - time
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+  /statistics/evaluations:
+    get:
+      operationId: StatisticsController_getEvaluationStatistics
+      summary: 获取评估统计数据
+      parameters:
+        - name: start_date
+          required: false
+          in: query
+          description: 开始日期
+          schema:
+            example: '2024-01-01'
+            type: string
+        - name: end_date
+          required: false
+          in: query
+          description: 结束日期
+          schema:
+            example: '2024-12-31'
+            type: string
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: time_dimension
+          required: false
+          in: query
+          description: 时间维度
+          schema:
+            enum:
+              - day
+              - week
+              - month
+              - quarter
+              - year
+            type: string
+        - name: group_by
+          required: false
+          in: query
+          description: 分组维度
+          schema:
+            enum:
+              - department
+              - user
+              - assessment
+              - time
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+  /statistics/trends:
+    get:
+      operationId: StatisticsController_getPerformanceTrends
+      summary: 获取绩效趋势数据
+      parameters:
+        - name: start_date
+          required: false
+          in: query
+          description: 开始日期
+          schema:
+            example: '2024-01-01'
+            type: string
+        - name: end_date
+          required: false
+          in: query
+          description: 结束日期
+          schema:
+            example: '2024-12-31'
+            type: string
+        - name: department_id
+          required: false
+          in: query
+          description: 部门ID
+          schema:
+            type: number
+        - name: user_id
+          required: false
+          in: query
+          description: 用户ID
+          schema:
+            type: number
+        - name: assessment_id
+          required: false
+          in: query
+          description: 考核ID
+          schema:
+            type: number
+        - name: time_dimension
+          required: false
+          in: query
+          description: 时间维度
+          schema:
+            enum:
+              - day
+              - week
+              - month
+              - quarter
+              - year
+            type: string
+        - name: group_by
+          required: false
+          in: query
+          description: 分组维度
+          schema:
+            enum:
+              - department
+              - user
+              - assessment
+              - time
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+      tags: *ref_15
+      security: *ref_16
+info:
+  title: OKR绩效考核系统API
+  description: OKR绩效考核系统后端API文档
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+  schemas:
+    LoginDto:
+      type: object
+      properties:
+        username:
+          type: string
+          description: 用户名
+          example: admin
+        password:
+          type: string
+          description: 密码
+          example: '123456'
+      required:
+        - username
+        - password
+    DepartmentResponseDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: 部门ID
+          example: 1
+        name:
+          type: string
+          description: 部门名称
+          example: 技术部
+        description:
+          type: string
+          description: 部门描述
+          example: 负责技术研发工作
+        parent_id:
+          type: number
+          description: 父部门ID
+          example: 1
+        sort_order:
+          type: number
+          description: 排序
+          example: 0
+        status:
+          type: number
+          description: 状态
+          example: 1
+        employeeCount:
+          type: number
+          description: 员工数量
+          example: 10
+        created_at:
+          format: date-time
+          type: string
+          description: 创建时间
+          example: '2023-01-01T00:00:00Z'
+        updated_at:
+          format: date-time
+          type: string
+          description: 更新时间
+          example: '2023-01-01T00:00:00Z'
+      required:
+        - id
+        - name
+        - sort_order
+        - status
+        - created_at
+        - updated_at
+    SimpleUserResponseDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: 用户ID
+          example: 1
+        username:
+          type: string
+          description: 用户名
+          example: admin
+        name:
+          type: string
+          description: 姓名
+          example: 系统管理员
+        position:
+          type: string
+          description: 职位
+          example: 系统管理员
+      required:
+        - id
+        - username
+        - name
+    RoleResponseDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: 角色ID
+          example: 1
+        code:
+          type: string
+          description: 角色代码
+          example: admin
+        name:
+          type: string
+          description: 角色名称
+          example: 系统管理员
+        description:
+          type: string
+          description: 角色描述
+          example: 系统管理员角色
+        permissions:
+          description: 权限列表
+          example:
+            - user:read
+            - user:write
+          type: array
+          items:
+            type: string
+        status:
+          type: number
+          description: 状态
+          example: 1
+        created_at:
+          format: date-time
+          type: string
+          description: 创建时间
+          example: '2023-01-01T00:00:00Z'
+        updated_at:
+          format: date-time
+          type: string
+          description: 更新时间
+          example: '2023-01-01T00:00:00Z'
+      required:
+        - id
+        - code
+        - name
+        - status
+        - created_at
+        - updated_at
+    UserResponseDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: 用户ID
+          example: 1
+        username:
+          type: string
+          description: 用户名
+          example: admin
+        name:
+          type: string
+          description: 姓名
+          example: 系统管理员
+        email:
+          type: string
+          description: 邮箱
+          example: admin@example.com
+        phone:
+          type: string
+          description: 电话
+          example: '13800138000'
+        avatar:
+          type: string
+          description: 头像
+          example: avatar.jpg
+        status:
+          type: number
+          description: 状态
+          example: 1
+        join_date:
+          format: date-time
+          type: string
+          description: 入职日期
+          example: '2023-01-01'
+        position:
+          type: string
+          description: 职位
+          example: 系统管理员
+        department:
+          description: 部门信息
+          allOf:
+            - $ref: '#/components/schemas/DepartmentResponseDto'
+        leader:
+          description: 直属领导
+          allOf:
+            - $ref: '#/components/schemas/SimpleUserResponseDto'
+        roles:
+          description: 角色列表
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleResponseDto'
+        created_at:
+          format: date-time
+          type: string
+          description: 创建时间
+          example: '2023-01-01T00:00:00Z'
+        updated_at:
+          format: date-time
+          type: string
+          description: 更新时间
+          example: '2023-01-01T00:00:00Z'
+      required:
+        - id
+        - username
+        - name
+        - status
+        - roles
+        - created_at
+        - updated_at
+    LoginResponseDto:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: 访问令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: 刷新令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          description: 用户信息
+          allOf:
+            - $ref: '#/components/schemas/UserResponseDto'
+      required:
+        - access_token
+        - refresh_token
+        - user
+    RefreshTokenDto:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+          description: 刷新令牌
+      required:
+        - refresh_token
+    RefreshTokenResponseDto:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: 访问令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: 刷新令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      required:
+        - access_token
+        - refresh_token
+    MessageResponseDto:
+      type: object
+      properties:
+        message:
+          type: string
+          description: 消息内容
+          example: 操作成功
+      required:
+        - message
+    ChangePasswordDto:
+      type: object
+      properties:
+        oldPassword:
+          type: string
+          description: 原密码
+        newPassword:
+          type: string
+          description: 新密码
+      required:
+        - oldPassword
+        - newPassword
+    CreateUserDto:
+      type: object
+      properties:
+        username:
+          type: string
+          description: 用户名
+          example: zhangsan
+        password:
+          type: string
+          description: 密码
+          example: '123456'
+        name:
+          type: string
+          description: 真实姓名
+          example: 张三
+        email:
+          type: string
+          description: 邮箱
+          example: zhangsan@example.com
+        phone:
+          type: string
+          description: 电话
+          example: '13800138000'
+        position:
+          type: string
+          description: 职位
+          example: 前端工程师
+        department_id:
+          type: number
+          description: 部门ID
+          example: 1
+        leader_id:
+          type: number
+          description: 直属领导ID
+          example: 3
+        role_ids:
+          description: 角色ID列表
+          example: &ref_17
+            - 4
+          type: array
+          items:
+            type: string
+        join_date:
+          type: string
+          description: 入职日期
+          example: '2023-03-15'
+      required:
+        - username
+        - password
+        - name
+        - role_ids
+    UserListResponseDto:
+      type: object
+      properties:
+        data:
+          description: 用户列表
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponseDto'
+        total:
+          type: number
+          description: 总记录数
+          example: 100
+        page:
+          type: number
+          description: 当前页
+          example: 1
+        limit:
+          type: number
+          description: 每页数量
+          example: 10
+        totalPages:
+          type: number
+          description: 总页数
+          example: 10
+      required:
+        - data
+        - total
+        - page
+        - limit
+        - totalPages
+    UpdateUserDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 真实姓名
+          example: 张三
+        email:
+          type: string
+          description: 邮箱
+          example: zhangsan@example.com
+        phone:
+          type: string
+          description: 电话
+          example: '13800138000'
+        position:
+          type: string
+          description: 职位
+          example: 前端工程师
+        department_id:
+          type: number
+          description: 部门ID
+          example: 1
+        leader_id:
+          type: number
+          description: 直属领导ID
+          example: 3
+        role_ids:
+          description: 角色ID列表
+          example: *ref_17
+          type: array
+          items:
+            type: string
+        join_date:
+          type: string
+          description: 入职日期
+          example: '2023-03-15'
+    ResetPasswordDto:
+      type: object
+      properties:
+        password:
+          type: string
+          description: 新密码
+          example: newpassword
+      required:
+        - password
+    DepartmentListResponseDto:
+      type: object
+      properties:
+        data:
+          description: 部门列表
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentResponseDto'
+      required:
+        - data
+    RoleListResponseDto:
+      type: object
+      properties:
+        data:
+          description: 角色列表
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleResponseDto'
+      required:
+        - data
+    CreateAssessmentDto:
+      type: object
+      properties:
+        title:
+          type: string
+          description: 考核标题
+          example: 2025年7月绩效考核
+        period:
+          type: string
+          description: 考核周期（YYYY-MM）
+          example: 2025-07
+        description:
+          type: string
+          description: 考核说明
+        start_date:
+          type: string
+          description: 开始日期
+          example: '2025-07-01'
+        end_date:
+          type: string
+          description: 结束日期
+          example: '2025-07-31'
+        deadline:
+          type: string
+          description: 提交截止日期
+          example: '2025-08-05'
+        template_id:
+          type: number
+          description: 模板ID
+        participant_ids:
+          description: 参与者用户ID列表
+          type: array
+          items:
+            type: number
+      required:
+        - title
+        - period
+        - start_date
+        - end_date
+        - deadline
+        - participant_ids
+    UpdateAssessmentDto:
+      type: object
+      properties:
+        title:
+          type: string
+          description: 考核标题
+          example: 2025年7月绩效考核
+        period:
+          type: string
+          description: 考核周期（YYYY-MM）
+          example: 2025-07
+        description:
+          type: string
+          description: 考核说明
+        start_date:
+          type: string
+          description: 开始日期
+          example: '2025-07-01'
+        end_date:
+          type: string
+          description: 结束日期
+          example: '2025-07-31'
+        deadline:
+          type: string
+          description: 提交截止日期
+          example: '2025-08-05'
+        template_id:
+          type: number
+          description: 模板ID
+        participant_ids:
+          description: 参与者用户ID列表
+          type: array
+          items:
+            type: number
+        status:
+          type: string
+          description: 考核状态
+          enum:
+            - draft
+            - active
+            - completed
+            - ended
+    CreateKeyResultDto:
+      type: object
+      properties:
+        title:
+          type: string
+          description: 关键结果标题
+          example: 优化构建流程
+        description:
+          type: string
+          description: 详细描述
+        target_value:
+          type: string
+          description: 目标值
+          example: '2'
+        unit:
+          type: string
+          description: 单位
+          example: 分钟
+        weight:
+          type: number
+          description: 权重（百分比）
+          example: 40
+      required:
+        - title
+        - target_value
+        - weight
+    CreateOkrDto:
+      type: object
+      properties:
+        user_id:
+          type: number
+          description: 用户ID
+        assessment_id:
+          type: number
+          description: 考核ID
+        objective:
+          type: string
+          description: 目标描述
+          example: 提升前端开发效率
+        description:
+          type: string
+          description: 目标详细说明
+        weight:
+          type: number
+          description: 权重（百分比）
+          example: 100
+        key_results:
+          description: 关键结果列表
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateKeyResultDto'
+      required:
+        - user_id
+        - assessment_id
+        - objective
+        - weight
+        - key_results
+    UpdateOkrDto:
+      type: object
+      properties:
+        objective:
+          type: string
+          description: 目标描述
+        description:
+          type: string
+          description: 目标详细说明
+        weight:
+          type: number
+          description: 权重（百分比）
+        progress:
+          type: number
+          description: 完成进度（百分比）
+        status:
+          type: string
+          description: 状态
+          enum:
+            - active
+            - completed
+            - cancelled
+        self_rating:
+          type: number
+          description: 自评等级（1-5）
+        leader_rating:
+          type: number
+          description: 领导评分等级（1-5）
+    UpdateKeyResultDto:
+      type: object
+      properties:
+        title:
+          type: string
+          description: 关键结果标题
+        description:
+          type: string
+          description: 详细描述
+        target_value:
+          type: string
+          description: 目标值
+        current_value:
+          type: string
+          description: 当前值
+        unit:
+          type: string
+          description: 单位
+        progress:
+          type: number
+          description: 完成进度（百分比）
+        weight:
+          type: number
+          description: 权重（百分比）
+        status:
+          type: string
+          description: 状态
+          enum:
+            - active
+            - completed
+            - cancelled
+    CreateSelfEvaluationDto:
+      type: object
+      properties:
+        assessment_id:
+          type: number
+          description: 考核ID
+        score:
+          type: number
+          description: 评分
+          example: 85.5
+        feedback:
+          type: string
+          description: 反馈意见
+        strengths:
+          type: string
+          description: 优势
+        improvements:
+          type: string
+          description: 改进建议
+      required:
+        - assessment_id
+        - score
+    CreateLeaderEvaluationDto:
+      type: object
+      properties:
+        assessment_id:
+          type: number
+          description: 考核ID
+        evaluatee_id:
+          type: number
+          description: 被评估人ID
+        score:
+          type: number
+          description: 评分
+          example: 88
+        feedback:
+          type: string
+          description: 反馈意见
+        strengths:
+          type: string
+          description: 优势
+        improvements:
+          type: string
+          description: 改进建议
+      required:
+        - assessment_id
+        - evaluatee_id
+        - score
+    UpdateEvaluationDto:
+      type: object
+      properties:
+        score:
+          type: number
+          description: 评分
+        feedback:
+          type: string
+          description: 反馈意见
+        strengths:
+          type: string
+          description: 优势
+        improvements:
+          type: string
+          description: 改进建议
+        status:
+          type: string
+          description: 评估状态
+          enum:
+            - draft
+            - submitted
+    CreateTemplateDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 模板名称
+          example: OKR评估模板
+        description:
+          type: string
+          description: 模板描述
+        type:
+          type: string
+          description: 模板类型
+          enum:
+            - okr
+            - assessment
+            - evaluation
+          example: okr
+        config:
+          type: object
+          description: 模板配置
+          example:
+            fields:
+              - name: objective
+                type: text
+                required: true
+              - name: keyResults
+                type: array
+                required: true
+        is_default:
+          type: boolean
+          description: 是否默认模板
+          example: false
+      required:
+        - name
+        - type
+        - config
+    CloneTemplateDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 新模板名称
+          example: OKR评估模板 - 副本
+        description:
+          type: string
+          description: 新模板描述
+        is_default:
+          type: boolean
+          description: 是否设为默认模板
+          example: false
+      required:
+        - name
+    UpdateTemplateDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 模板名称
+        description:
+          type: string
+          description: 模板描述
+        type:
+          type: string
+          description: 模板类型
+          enum:
+            - okr
+            - assessment
+            - evaluation
+        config:
+          type: object
+          description: 模板配置
+        is_default:
+          type: boolean
+          description: 是否默认模板
+        status:
+          type: number
+          description: 模板状态
+          enum:
+            - 0
+            - 1

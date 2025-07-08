@@ -9,7 +9,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { UserResponseDto, UserListResponseDto, MessageResponseDto } from '../../common/dto/responses.dto';
 
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -29,6 +30,10 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @ApiOperation({ summary: '创建用户' })
+  @ApiResponse({ status: 201, description: '创建成功', type: UserResponseDto })
+  @ApiResponse({ status: 400, description: '参数错误' })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 403, description: '无权限' })
   @Roles('admin')
   @UseGuards(RolesGuard)
   @Post()
@@ -37,18 +42,28 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: '获取用户列表' })
+  @ApiResponse({ status: 200, description: '获取成功', type: UserListResponseDto })
+  @ApiResponse({ status: 401, description: '未授权' })
   @Get()
   findAll(@Query() query: QueryUsersDto) {
     return this.usersService.findAll(query);
   }
 
   @ApiOperation({ summary: '获取用户详情' })
+  @ApiResponse({ status: 200, description: '获取成功', type: UserResponseDto })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(+id);
   }
 
   @ApiOperation({ summary: '更新用户信息' })
+  @ApiResponse({ status: 200, description: '更新成功', type: UserResponseDto })
+  @ApiResponse({ status: 400, description: '参数错误' })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 403, description: '无权限' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
   @Roles('admin')
   @UseGuards(RolesGuard)
   @Patch(':id')
@@ -57,6 +72,10 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: '删除用户' })
+  @ApiResponse({ status: 200, description: '删除成功', type: MessageResponseDto })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 403, description: '无权限' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
   @Roles('admin')
   @UseGuards(RolesGuard)
   @Delete(':id')
@@ -65,6 +84,11 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: '重置用户密码' })
+  @ApiResponse({ status: 200, description: '重置成功', type: MessageResponseDto })
+  @ApiResponse({ status: 400, description: '参数错误' })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 403, description: '无权限' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
   @Roles('admin')
   @UseGuards(RolesGuard)
   @Post(':id/reset-password')
@@ -73,6 +97,10 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: '切换用户状态' })
+  @ApiResponse({ status: 200, description: '切换成功', type: MessageResponseDto })
+  @ApiResponse({ status: 401, description: '未授权' })
+  @ApiResponse({ status: 403, description: '无权限' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
   @Roles('admin')
   @UseGuards(RolesGuard)
   @Post(':id/toggle-status')
