@@ -225,7 +225,10 @@ export class ValidationService {
     // 获取模板配置信息用于响应
     const templateConfig = assessment.template || currentTemplateConfig
       ? {
-          evaluatorWeights: { self: 0.3, leader: 0.7 }, // 从配置中获取或使用默认值
+          evaluatorWeights: {
+            self: currentTemplateConfig?.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
+            leader: currentTemplateConfig?.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
+          },
           categoryWeights: currentTemplateConfig?.categories || [],
         }
       : {
