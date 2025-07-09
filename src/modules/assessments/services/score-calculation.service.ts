@@ -45,11 +45,20 @@ export class ScoreCalculationService {
   async calculateParticipantScores(
     assessmentId: number,
     participants: AssessmentParticipant[],
+    templateConfig?: any,
   ): Promise<ParticipantScoreResult[]> {
-    // 获取考核的模板配置
-    const template = await this.getAssessmentTemplate(assessmentId);
-    if (!template) {
-      throw new BadRequestException('考核没有关联的模板，无法计算得分');
+    // 优先使用传入的模板配置（考核的配置快照）
+    let template = null;
+    
+    if (templateConfig) {
+      // 使用传入的配置快照创建临时模板对象
+      template = { config: templateConfig };
+    } else {
+      // 如果没有传入配置，则获取考核的模板配置（向后兼容）
+      template = await this.getAssessmentTemplate(assessmentId);
+      if (!template) {
+        throw new BadRequestException('考核没有关联的模板，无法计算得分');
+      }
     }
 
     const results: ParticipantScoreResult[] = [];

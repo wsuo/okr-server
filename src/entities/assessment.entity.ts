@@ -54,6 +54,9 @@ export class Assessment {
   @JoinColumn({ name: 'template_id' })
   template: Template;
 
+  @Column({ type: 'json', nullable: true, comment: '模板配置快照，考核发布时复制模板配置到此字段' })
+  template_config: any;
+
   @ManyToOne(() => User)
   @JoinColumn({ name: 'created_by' })
   creator: User;

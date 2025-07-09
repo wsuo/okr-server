@@ -195,10 +195,12 @@ export class ValidationService {
       relations: ['user'],
     });
 
-    // 计算得分
+    // 使用模板配置快照进行得分计算
+    const templateConfig = assessment.template_config || assessment.template?.config;
     const scoreResults = await this.scoreCalculationService.calculateParticipantScores(
       assessmentId,
       participants,
+      templateConfig,
     );
 
     // 转换为预览格式

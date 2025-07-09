@@ -523,8 +523,21 @@ export class AssessmentsService {
     // 发布前验证考核配置的完整性
     await this.validateAssessmentForPublish(assessment);
     
-    // 更新状态为active
-    await this.assessmentsRepository.update(id, { status: 'active' });
+    // 获取完整的模板信息（包括配置）
+    const fullAssessment = await this.assessmentsRepository.findOne({
+      where: { id },
+      relations: ['template'],
+    });
+    
+    if (!fullAssessment || !fullAssessment.template) {
+      throw new BadRequestException('考核模板信息不完整，无法发布');
+    }
+    
+    // 创建模板配置快照并更新状态为active
+    await this.assessmentsRepository.update(id, { 
+      status: 'active',
+      template_config: fullAssessment.template.config
+    });
     
     return this.findOne(id, currentUserId);
   }
@@ -544,16 +557,24 @@ export class AssessmentsService {
       // 检查评估完成度
       await this.checkEvaluationCompleteness(id);
 
+      // 获取考核的完整信息，包括模板配置快照
+      const fullAssessment = await this.assessmentsRepository.findOne({
+        where: { id },
+        relations: ['template'],
+      });
+
       // 获取所有参与者（包含用户信息）
       const participants = await this.participantsRepository.find({
         where: { assessment: { id }, deleted_at: null },
         relations: ['user'],
       });
 
-      // 使用新的得分计算服务计算最终得分
+      // 使用模板配置快照进行得分计算
+      const templateConfig = fullAssessment.template_config || fullAssessment.template?.config;
       const scoreResults = await this.scoreCalculationService.calculateParticipantScores(
         id,
         participants,
+        templateConfig,
       );
 
       // 更新参与者的得分信息
