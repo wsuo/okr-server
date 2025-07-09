@@ -59,6 +59,7 @@ export class AssessmentsService {
       queryBuilder.getRawAndEntities(),
       this.assessmentsRepository.count({
         where: {
+          deleted_at: null,
           ...(status && { status }),
           ...(period && { period }),
           ...(search && { title: Like(`%${search}%`) }),
