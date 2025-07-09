@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, DataSource } from 'typeorm';
+import { Repository, Like, DataSource, In } from 'typeorm';
 import { Assessment } from '../../entities/assessment.entity';
 import { AssessmentParticipant } from '../../entities/assessment-participant.entity';
 import { User } from '../../entities/user.entity';
@@ -387,26 +387,61 @@ export class AssessmentsService {
         // 更新考核基本信息
         await queryRunner.manager.update(Assessment, id, updateData);
         
-        // 删除现有参与者
-        await queryRunner.manager.softDelete(AssessmentParticipant, {
-          assessment: { id },
-        });
-        
         // 验证新参与者是否存在
         const users = await this.usersRepository.findByIds(participant_ids);
         if (users.length !== participant_ids.length) {
           throw new BadRequestException('部分参与者用户不存在');
         }
         
-        // 创建新的参与者记录
-        const participants = participant_ids.map(userId => 
-          this.participantsRepository.create({
-            assessment: { id } as Assessment,
-            user: { id: userId } as User,
-          })
-        );
+        // 获取现有参与者（包括软删除的）
+        const existingParticipants = await queryRunner.manager.find(AssessmentParticipant, {
+          where: { assessment: { id } },
+          relations: ['user'],
+          withDeleted: true, // 包括软删除的记录
+        });
         
-        await queryRunner.manager.save(participants);
+        // 计算需要添加和删除的参与者
+        const existingUserIds = existingParticipants
+          .filter(p => !p.deleted_at)
+          .map(p => p.user.id);
+        
+        const toAdd = participant_ids.filter(userId => !existingUserIds.includes(userId));
+        const toRemove = existingUserIds.filter(userId => !participant_ids.includes(userId));
+        const toRestore = participant_ids.filter(userId => {
+          const existing = existingParticipants.find(p => p.user.id === userId && p.deleted_at);
+          return !!existing;
+        });
+        
+        // 软删除不再参与的用户
+        if (toRemove.length > 0) {
+          await queryRunner.manager.softDelete(AssessmentParticipant, {
+            assessment: { id },
+            user: { id: toRemove.length === 1 ? toRemove[0] : In(toRemove) },
+          });
+        }
+        
+        // 恢复之前软删除的参与者
+        if (toRestore.length > 0) {
+          for (const userId of toRestore) {
+            await queryRunner.manager.restore(AssessmentParticipant, {
+              assessment: { id },
+              user: { id: userId },
+            });
+          }
+        }
+        
+        // 创建新的参与者记录
+        if (toAdd.length > 0) {
+          const participants = toAdd.map(userId => 
+            this.participantsRepository.create({
+              assessment: { id } as Assessment,
+              user: { id: userId } as User,
+            })
+          );
+          
+          await queryRunner.manager.save(participants);
+        }
+        
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
