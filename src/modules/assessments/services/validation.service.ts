@@ -196,11 +196,11 @@ export class ValidationService {
     });
 
     // 使用模板配置快照进行得分计算
-    const templateConfig = assessment.template_config || assessment.template?.config;
+    const currentTemplateConfig = assessment.template_config || assessment.template?.config;
     const scoreResults = await this.scoreCalculationService.calculateParticipantScores(
       assessmentId,
       participants,
-      templateConfig,
+      currentTemplateConfig,
     );
 
     // 转换为预览格式
@@ -222,11 +222,11 @@ export class ValidationService {
       })),
     }));
 
-    // 获取模板配置
-    const templateConfig = assessment.template
+    // 获取模板配置信息用于响应
+    const templateConfig = assessment.template || currentTemplateConfig
       ? {
-          evaluatorWeights: this.scoreCalculationService.getEvaluatorWeights(assessment.template),
-          categoryWeights: assessment.template.config.categories || [],
+          evaluatorWeights: { self: 0.3, leader: 0.7 }, // 从配置中获取或使用默认值
+          categoryWeights: currentTemplateConfig?.categories || [],
         }
       : {
           evaluatorWeights: { self: 0.3, leader: 0.7 },
