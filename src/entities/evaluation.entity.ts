@@ -30,6 +30,9 @@ export class Evaluation {
   @Column({ type: 'text', nullable: true })
   improvements: string;
 
+  @Column({ type: 'json', nullable: true, comment: '详细评分数据，包含分类别、分项目的评分信息' })
+  detailed_scores: any;
+
   @Column({ length: 20, default: 'draft' })
   status: string;
 
