@@ -183,6 +183,7 @@ curl -s http://localhost:3000/api/v1/assessments/${ASSESSMENT_ID}/edit \
   -H "Content-Type: application/json" \
   -d '{
     "title": "2025年第三季度绩效考核（已修订）",
+    "period": "2025-09-revised",
     "description": "增加新的参与者和更新截止时间",
     "deadline": "2025-10-10",
     "participant_ids": [1, 2, 3]

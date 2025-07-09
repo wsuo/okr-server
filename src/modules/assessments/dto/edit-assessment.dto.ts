@@ -7,6 +7,11 @@ export class EditAssessmentDto {
   @IsOptional()
   title?: string;
 
+  @ApiProperty({ description: '考核周期', required: false })
+  @IsString()
+  @IsOptional()
+  period?: string;
+
   @ApiProperty({ description: '考核说明', required: false })
   @IsString()
   @IsOptional()

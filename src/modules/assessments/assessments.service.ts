@@ -348,8 +348,31 @@ export class AssessmentsService {
       throw new BadRequestException('只有考核创建者可以编辑考核');
     }
     
-    // 编辑数据（EditAssessmentDto已经排除了status字段）
-    const editData = editAssessmentDto;
+    // 如果修改了周期，检查唯一性
+    if (editAssessmentDto.period && editAssessmentDto.period !== assessment.period) {
+      const existingAssessment = await this.assessmentsRepository.findOne({
+        where: { period: editAssessmentDto.period, deleted_at: null },
+      });
+      
+      if (existingAssessment) {
+        throw new BadRequestException(`考核周期 ${editAssessmentDto.period} 已存在`);
+      }
+    }
+    
+    // 处理编辑数据，将 template_id 转换为 template 关系
+    const editData: any = { ...editAssessmentDto };
+    
+    // 如果修改了模板，需要转换 template_id 为 template 关系
+    if (editData.template_id !== undefined) {
+      const templateId = editData.template_id;
+      delete editData.template_id; // 删除 template_id 字段
+      
+      if (templateId) {
+        editData.template = { id: templateId };
+      } else {
+        editData.template = null;
+      }
+    }
     
     // 如果修改了参与者，需要重新处理参与者关系
     if (editData.participant_ids) {
@@ -358,8 +381,11 @@ export class AssessmentsService {
       await queryRunner.startTransaction();
       
       try {
+        // 从editData中移除participant_ids，避免TypeORM错误
+        const { participant_ids, ...updateData } = editData;
+        
         // 更新考核基本信息
-        await queryRunner.manager.update(Assessment, id, editData);
+        await queryRunner.manager.update(Assessment, id, updateData);
         
         // 删除现有参与者
         await queryRunner.manager.softDelete(AssessmentParticipant, {
@@ -367,13 +393,13 @@ export class AssessmentsService {
         });
         
         // 验证新参与者是否存在
-        const users = await this.usersRepository.findByIds(editData.participant_ids);
-        if (users.length !== editData.participant_ids.length) {
+        const users = await this.usersRepository.findByIds(participant_ids);
+        if (users.length !== participant_ids.length) {
           throw new BadRequestException('部分参与者用户不存在');
         }
         
         // 创建新的参与者记录
-        const participants = editData.participant_ids.map(userId => 
+        const participants = participant_ids.map(userId => 
           this.participantsRepository.create({
             assessment: { id } as Assessment,
             user: { id: userId } as User,
@@ -390,7 +416,9 @@ export class AssessmentsService {
       }
     } else {
       // 只更新基本信息，不涉及参与者
-      await this.assessmentsRepository.update(id, editData);
+      // 从editData中移除不属于实体的字段
+      const { participant_ids, ...updateData } = editData;
+      await this.assessmentsRepository.update(id, updateData);
     }
     
     return this.findOne(id, currentUserId);
