@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { WinstonModule } from 'nest-winston';
+import { RequestLoggerMiddleware } from './common/middleware';
 
 import { databaseConfig } from './config/database.config';
 import { cacheConfig } from './config/cache.config';
@@ -41,7 +42,7 @@ import { SeedModule } from './database/seeds/seed.module';
         entities: [__dirname + '/entities/*.entity{.ts,.js}'],
         migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
         synchronize: false,
-        logging: configService.get('NODE_ENV') === 'development',
+        logging: false,
         charset: 'utf8mb4',
         extra: {
           connectionLimit: 10,
@@ -77,4 +78,8 @@ import { SeedModule } from './database/seeds/seed.module';
     SeedModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}

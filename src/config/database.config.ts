@@ -1,6 +1,10 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
+import { config } from 'dotenv';
+
+// 确保在CLI运行时加载.env文件
+config();
 
 export const databaseConfig: TypeOrmModuleOptions = {
   type: 'mysql',
@@ -12,7 +16,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
   entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   synchronize: process.env.NODE_ENV === 'development',
-  logging: process.env.NODE_ENV === 'development',
+  logging: false,
   charset: 'utf8mb4',
   extra: {
     connectionLimit: 10,

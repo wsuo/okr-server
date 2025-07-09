@@ -13,6 +13,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "serve:dev": "./scripts/start-dev.sh",
+    "serve:prod": "./scripts/start-prod.sh",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -56,6 +58,7 @@
     "swagger-ui-express": "^5.0.0",
     "typeorm": "^0.3.17",
     "winston": "^3.10.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
