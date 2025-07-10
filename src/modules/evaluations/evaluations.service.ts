@@ -977,29 +977,30 @@ export class EvaluationsService {
   ): Promise<EvaluationTaskDto[]> {
     const tasks: EvaluationTaskDto[] = [];
 
-    // 获取自评任务
-    const selfTasks = await this.getSelfEvaluationTasks(userId, assessmentId);
-    tasks.push(...selfTasks);
+    try {
+      // 获取自评任务
+      const selfTasks = await this.getSelfEvaluationTasks(userId, assessmentId);
+      tasks.push(...selfTasks);
 
-    // 获取领导评分任务
-    const leaderTasks = await this.getLeaderEvaluationTasks(
-      userId,
-      assessmentId
-    );
-    tasks.push(...leaderTasks);
+      // 获取领导评分任务
+      const leaderTasks = await this.getLeaderEvaluationTasks(userId, assessmentId);
+      tasks.push(...leaderTasks);
 
-    // 按截止时间排序，增加日期有效性检查
-    return tasks.sort((a, b) => {
-      const dateA = new Date(a.deadline);
-      const dateB = new Date(b.deadline);
+      // 按截止时间排序
+      return tasks.sort((a, b) => {
+        const dateA = new Date(a.deadline);
+        const dateB = new Date(b.deadline);
 
-      // 处理无效日期
-      if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
-      if (isNaN(dateA.getTime())) return 1; // 无效日期排到后面
-      if (isNaN(dateB.getTime())) return -1;
+        if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
+        if (isNaN(dateA.getTime())) return 1;
+        if (isNaN(dateB.getTime())) return -1;
 
-      return dateA.getTime() - dateB.getTime();
-    });
+        return dateA.getTime() - dateB.getTime();
+      });
+    } catch (error) {
+      console.error('Error in getMyTasks:', error);
+      throw error;
+    }
   }
 
   async getEvaluationProgress(
@@ -1283,22 +1284,25 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: userId },
       deleted_at: null,
+      assessment: { status: 'active' }
     };
 
     if (assessmentId) {
-      whereCondition.assessment = { id: assessmentId };
+      whereCondition.assessment = { ...whereCondition.assessment, id: assessmentId };
     }
 
     const participants = await this.participantsRepository.find({
       where: whereCondition,
-      relations: ["assessment", "user"],
+      relations: ["assessment", "user", "user.department"],
     });
 
     const tasks: EvaluationTaskDto[] = [];
 
     for (const participant of participants) {
-      // 只处理进行中的考核
-      if (participant.assessment.status !== "active") continue;
+      // 检查是否已完成自评
+      if (participant.self_completed === 1) {
+        continue;
+      }
 
       // 检查是否已有自评记录
       const evaluation = await this.evaluationsRepository.findOne({
@@ -1312,8 +1316,7 @@ export class EvaluationsService {
 
       let status: "pending" | "in_progress" | "completed" = "pending";
       if (evaluation) {
-        status =
-          evaluation.status === "submitted" ? "completed" : "in_progress";
+        status = evaluation.status === "submitted" ? "completed" : "in_progress";
       }
 
       const now = new Date();
@@ -1321,18 +1324,16 @@ export class EvaluationsService {
 
       // 检查日期有效性
       if (isNaN(deadline.getTime())) {
-        console.warn(
-          `Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`
-        );
-        continue; // 跳过无效的任务
+        console.warn(`Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`);
+        continue;
       }
 
-      tasks.push({
+      const task = {
         id: `self-${participant.assessment.id}-${userId}`,
         assessment_id: participant.assessment.id,
         assessment_title: participant.assessment.title,
         assessment_period: participant.assessment.period,
-        type: "self",
+        type: "self" as const,
         evaluatee_id: userId,
         evaluatee_name: participant.user.name,
         evaluatee_department: participant.user.department?.name || "",
@@ -1341,7 +1342,9 @@ export class EvaluationsService {
         is_overdue: now > deadline && status !== "completed",
         evaluation_id: evaluation?.id,
         last_updated: evaluation?.updated_at,
-      });
+      };
+
+      tasks.push(task);
     }
 
     return tasks;
@@ -1364,10 +1367,11 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: In(subordinates.map((s) => s.id)) },
       deleted_at: null,
+      assessment: { status: 'active' }
     };
 
     if (assessmentId) {
-      whereCondition.assessment = { id: assessmentId };
+      whereCondition.assessment = { ...whereCondition.assessment, id: assessmentId };
     }
 
     const participants = await this.participantsRepository.find({
@@ -1378,8 +1382,10 @@ export class EvaluationsService {
     const tasks: EvaluationTaskDto[] = [];
 
     for (const participant of participants) {
-      // 只处理进行中的考核
-      if (participant.assessment.status !== "active") continue;
+      // 检查是否已完成领导评分
+      if (participant.leader_completed === 1) {
+        continue;
+      }
 
       // 检查是否已有领导评分记录
       const evaluation = await this.evaluationsRepository.findOne({
@@ -1393,8 +1399,7 @@ export class EvaluationsService {
 
       let status: "pending" | "in_progress" | "completed" = "pending";
       if (evaluation) {
-        status =
-          evaluation.status === "submitted" ? "completed" : "in_progress";
+        status = evaluation.status === "submitted" ? "completed" : "in_progress";
       }
 
       const now = new Date();
@@ -1402,18 +1407,16 @@ export class EvaluationsService {
 
       // 检查日期有效性
       if (isNaN(deadline.getTime())) {
-        console.warn(
-          `Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`
-        );
-        continue; // 跳过无效的任务
+        console.warn(`Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`);
+        continue;
       }
 
-      tasks.push({
+      const task = {
         id: `leader-${participant.assessment.id}-${participant.user.id}`,
         assessment_id: participant.assessment.id,
         assessment_title: participant.assessment.title,
         assessment_period: participant.assessment.period,
-        type: "leader",
+        type: "leader" as const,
         evaluatee_id: participant.user.id,
         evaluatee_name: participant.user.name,
         evaluatee_department: participant.user.department?.name || "",
@@ -1422,7 +1425,9 @@ export class EvaluationsService {
         is_overdue: now > deadline && status !== "completed",
         evaluation_id: evaluation?.id,
         last_updated: evaluation?.updated_at,
-      });
+      };
+
+      tasks.push(task);
     }
 
     return tasks;

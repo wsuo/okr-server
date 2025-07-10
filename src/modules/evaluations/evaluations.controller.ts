@@ -68,6 +68,21 @@ export class EvaluationsController {
     return this.evaluationsService.getEvaluationsToGive(user.id, assessmentId);
   }
 
+  // 新增接口：任务和进度
+  @Get('my-tasks')
+  @ApiOperation({ summary: '获取我的评估任务列表' })
+  @ApiResponse({ status: 200, description: '获取成功', type: [EvaluationTaskDto] })
+  getMyTasks(
+    @CurrentUser() user: any,
+    @Query('assessment_id') assessmentId?: string
+  ) {
+    const parsedAssessmentId = assessmentId && assessmentId.trim() !== '' && !isNaN(Number(assessmentId)) 
+      ? Number(assessmentId) 
+      : undefined;
+    
+    return this.evaluationsService.getMyTasks(user.id, parsedAssessmentId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取评估详情' })
   @ApiResponse({ status: 200, description: '获取成功' })
@@ -186,17 +201,6 @@ export class EvaluationsController {
     @CurrentUser() user: any
   ) {
     return this.evaluationsService.createDraft(saveEvaluationDraftDto, user.id);
-  }
-
-  // 新增接口：任务和进度
-  @Get('my-tasks')
-  @ApiOperation({ summary: '获取我的评估任务列表' })
-  @ApiResponse({ status: 200, description: '获取成功', type: [EvaluationTaskDto] })
-  getMyTasks(
-    @CurrentUser() user: any,
-    @Query('assessment_id') assessmentId?: number
-  ) {
-    return this.evaluationsService.getMyTasks(user.id, assessmentId);
   }
 
   @Get('progress/:assessmentId')
