@@ -17,6 +17,7 @@ import {
   CreateDetailedSelfEvaluationDto,
   CreateDetailedLeaderEvaluationDto,
   SaveEvaluationDraftDto,
+  UpdateEvaluationDraftDto,
   DetailedCategoryScoreDto,
 } from "./dto/detailed-score.dto";
 import {
@@ -859,12 +860,12 @@ export class EvaluationsService {
   // 草稿保存功能
   async saveDraft(
     evaluationId: number,
-    saveEvaluationDraftDto: SaveEvaluationDraftDto,
+    updateEvaluationDraftDto: UpdateEvaluationDraftDto,
     currentUserId: number
   ): Promise<Evaluation> {
     const evaluation = await this.evaluationsRepository.findOne({
       where: { id: evaluationId },
-      relations: ["evaluator", "evaluatee"],
+      relations: ["evaluator", "evaluatee", "assessment"],
     });
 
     if (!evaluation) {
@@ -882,21 +883,23 @@ export class EvaluationsService {
     // 计算总分（如果有详细评分数据）
     let totalScore = evaluation.score;
     if (
-      saveEvaluationDraftDto.detailed_scores &&
-      saveEvaluationDraftDto.detailed_scores.length > 0
+      updateEvaluationDraftDto.detailed_scores &&
+      updateEvaluationDraftDto.detailed_scores.length > 0
     ) {
       totalScore = await this.calculateTotalScore(
-        saveEvaluationDraftDto.assessment_id,
-        saveEvaluationDraftDto.detailed_scores
+        evaluation.assessment.id,
+        updateEvaluationDraftDto.detailed_scores
       );
     }
 
     const updateData = {
       score: totalScore,
-      feedback: saveEvaluationDraftDto.overall_feedback,
-      strengths: saveEvaluationDraftDto.strengths,
-      improvements: saveEvaluationDraftDto.improvements,
-      detailed_scores: saveEvaluationDraftDto.detailed_scores,
+      feedback:
+        updateEvaluationDraftDto.self_review ||
+        updateEvaluationDraftDto.overall_feedback,
+      strengths: updateEvaluationDraftDto.strengths,
+      improvements: updateEvaluationDraftDto.improvements,
+      detailed_scores: updateEvaluationDraftDto.detailed_scores,
     };
 
     await this.evaluationsRepository.update(evaluationId, updateData);
@@ -933,11 +936,14 @@ export class EvaluationsService {
 
     if (existingEvaluation) {
       // 如果已存在，则更新
-      return this.saveDraft(
-        existingEvaluation.id,
-        saveEvaluationDraftDto,
-        currentUserId
-      );
+      const updateDto: UpdateEvaluationDraftDto = {
+        self_review: saveEvaluationDraftDto.self_review,
+        detailed_scores: saveEvaluationDraftDto.detailed_scores,
+        overall_feedback: saveEvaluationDraftDto.overall_feedback,
+        strengths: saveEvaluationDraftDto.strengths,
+        improvements: saveEvaluationDraftDto.improvements,
+      };
+      return this.saveDraft(existingEvaluation.id, updateDto, currentUserId);
     }
 
     // 计算总分（如果有详细评分数据）
@@ -959,7 +965,9 @@ export class EvaluationsService {
       evaluatee: { id: evaluateeId },
       type: saveEvaluationDraftDto.type,
       score: totalScore,
-      feedback: saveEvaluationDraftDto.overall_feedback,
+      feedback:
+        saveEvaluationDraftDto.self_review ||
+        saveEvaluationDraftDto.overall_feedback,
       strengths: saveEvaluationDraftDto.strengths,
       improvements: saveEvaluationDraftDto.improvements,
       detailed_scores: saveEvaluationDraftDto.detailed_scores,
@@ -983,7 +991,10 @@ export class EvaluationsService {
       tasks.push(...selfTasks);
 
       // 获取领导评分任务
-      const leaderTasks = await this.getLeaderEvaluationTasks(userId, assessmentId);
+      const leaderTasks = await this.getLeaderEvaluationTasks(
+        userId,
+        assessmentId
+      );
       tasks.push(...leaderTasks);
 
       // 按截止时间排序
@@ -998,7 +1009,7 @@ export class EvaluationsService {
         return dateA.getTime() - dateB.getTime();
       });
     } catch (error) {
-      console.error('Error in getMyTasks:', error);
+      console.error("Error in getMyTasks:", error);
       throw error;
     }
   }
@@ -1284,11 +1295,14 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: userId },
       deleted_at: null,
-      assessment: { status: 'active' }
+      assessment: { status: "active" },
     };
 
     if (assessmentId) {
-      whereCondition.assessment = { ...whereCondition.assessment, id: assessmentId };
+      whereCondition.assessment = {
+        ...whereCondition.assessment,
+        id: assessmentId,
+      };
     }
 
     const participants = await this.participantsRepository.find({
@@ -1316,7 +1330,8 @@ export class EvaluationsService {
 
       let status: "pending" | "in_progress" | "completed" = "pending";
       if (evaluation) {
-        status = evaluation.status === "submitted" ? "completed" : "in_progress";
+        status =
+          evaluation.status === "submitted" ? "completed" : "in_progress";
       }
 
       const now = new Date();
@@ -1324,7 +1339,9 @@ export class EvaluationsService {
 
       // 检查日期有效性
       if (isNaN(deadline.getTime())) {
-        console.warn(`Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`);
+        console.warn(
+          `Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`
+        );
         continue;
       }
 
@@ -1367,11 +1384,14 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: In(subordinates.map((s) => s.id)) },
       deleted_at: null,
-      assessment: { status: 'active' }
+      assessment: { status: "active" },
     };
 
     if (assessmentId) {
-      whereCondition.assessment = { ...whereCondition.assessment, id: assessmentId };
+      whereCondition.assessment = {
+        ...whereCondition.assessment,
+        id: assessmentId,
+      };
     }
 
     const participants = await this.participantsRepository.find({
@@ -1399,7 +1419,8 @@ export class EvaluationsService {
 
       let status: "pending" | "in_progress" | "completed" = "pending";
       if (evaluation) {
-        status = evaluation.status === "submitted" ? "completed" : "in_progress";
+        status =
+          evaluation.status === "submitted" ? "completed" : "in_progress";
       }
 
       const now = new Date();
@@ -1407,7 +1428,9 @@ export class EvaluationsService {
 
       // 检查日期有效性
       if (isNaN(deadline.getTime())) {
-        console.warn(`Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`);
+        console.warn(
+          `Invalid deadline for assessment ${participant.assessment.id}: ${participant.assessment.deadline}`
+        );
         continue;
       }
 

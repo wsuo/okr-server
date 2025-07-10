@@ -6,11 +6,12 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { Assessment } from './assessment.entity';
-import { User } from './user.entity';
+} from "typeorm";
+import { Assessment } from "./assessment.entity";
+import { User } from "./user.entity";
+import { timezoneTransformer } from "../common/transformers/timezone.transformer";
 
-@Entity('evaluations')
+@Entity("evaluations")
 export class Evaluation {
   @PrimaryGeneratedColumn()
   id: number;
@@ -18,42 +19,54 @@ export class Evaluation {
   @Column({ length: 20 })
   type: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: "decimal", precision: 5, scale: 2 })
   score: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   feedback: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   strengths: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   improvements: string;
 
-  @Column({ type: 'json', nullable: true, comment: '详细评分数据，包含分类别、分项目的评分信息' })
+  @Column({
+    type: "json",
+    nullable: true,
+    comment: "详细评分数据，包含分类别、分项目的评分信息",
+  })
   detailed_scores: any;
 
-  @Column({ length: 20, default: 'draft' })
+  @Column({ length: 20, default: "draft" })
   status: string;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ 
+    type: "timestamp", 
+    nullable: true,
+    transformer: timezoneTransformer
+  })
   submitted_at: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({
+    transformer: timezoneTransformer
+  })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({
+    transformer: timezoneTransformer
+  })
   updated_at: Date;
 
   @ManyToOne(() => Assessment)
-  @JoinColumn({ name: 'assessment_id' })
+  @JoinColumn({ name: "assessment_id" })
   assessment: Assessment;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'evaluator_id' })
+  @JoinColumn({ name: "evaluator_id" })
   evaluator: User;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'evaluatee_id' })
+  @JoinColumn({ name: "evaluatee_id" })
   evaluatee: User;
 }

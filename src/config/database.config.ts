@@ -1,23 +1,24 @@
-import { TypeOrmModuleOptions } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
-import { DataSource, DataSourceOptions } from 'typeorm';
-import { config } from 'dotenv';
+import { TypeOrmModuleOptions } from "@nestjs/typeorm";
+import { ConfigService } from "@nestjs/config";
+import { DataSource, DataSourceOptions } from "typeorm";
+import { config } from "dotenv";
 
 // 确保在CLI运行时加载.env文件
 config();
 
 export const databaseConfig: TypeOrmModuleOptions = {
-  type: 'mysql',
-  host: process.env.DB_HOST || 'localhost',
+  type: "mysql",
+  host: process.env.DB_HOST || "localhost",
   port: parseInt(process.env.DB_PORT) || 3306,
-  username: process.env.DB_USERNAME || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'okr_system',
-  entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
-  migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
-  synchronize: process.env.NODE_ENV === 'development',
+  username: process.env.DB_USERNAME || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_DATABASE || "okr_system",
+  entities: [__dirname + "/../entities/*.entity{.ts,.js}"],
+  migrations: [__dirname + "/../database/migrations/*{.ts,.js}"],
+  synchronize: process.env.NODE_ENV === "development",
   logging: false,
-  charset: 'utf8mb4',
+  charset: "utf8mb4",
+  timezone: "+08:00", // 设置为东八区
   extra: {
     connectionLimit: 10,
     connectTimeout: 60000,
