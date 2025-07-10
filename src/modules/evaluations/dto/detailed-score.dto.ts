@@ -55,6 +55,11 @@ export class CreateDetailedSelfEvaluationDto {
   @IsNumber()
   assessment_id: number;
 
+  @ApiProperty({ description: "自评内容", required: false })
+  @IsString()
+  @IsOptional()
+  self_review?: string;
+
   @ApiProperty({ description: "详细评分", type: [DetailedCategoryScoreDto] })
   @IsArray()
   @ValidateNested({ each: true })

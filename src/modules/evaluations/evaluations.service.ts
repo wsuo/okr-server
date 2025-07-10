@@ -377,29 +377,82 @@ export class EvaluationsService {
   }
 
   async getEvaluationsToGive(userId: number, assessmentId?: number) {
+    console.log(`[DEBUG] getEvaluationsToGive called with userId: ${userId}, assessmentId: ${assessmentId}`);
+    
     // 获取需要我评分的下属
     const subordinates = await this.usersRepository.find({
       where: { leader: { id: userId } },
     });
 
+    console.log(`[DEBUG] Found ${subordinates.length} subordinates for userId ${userId}:`, 
+      subordinates.map(s => ({ id: s.id, name: s.name, username: s.username })));
+
     if (subordinates.length === 0) {
+      console.log(`[DEBUG] No subordinates found for userId ${userId}, returning empty array`);
       return [];
     }
 
-    const where: any = {
-      evaluatee: { id: subordinates.map((s) => s.id) },
-      evaluator: { id: userId },
-      type: "leader",
+    const subordinateIds = subordinates.map((s) => s.id);
+    
+    // 修改逻辑：查找需要进行领导评分的参与者（已完成自评但未完成领导评分）
+    const participantsWhere: any = {
+      user: { id: In(subordinateIds) },
+      self_completed: 1,
+      leader_completed: 0,
+      assessment: { status: "active" },
     };
+    
     if (assessmentId) {
-      where.assessment = { id: assessmentId };
+      participantsWhere.assessment = { id: assessmentId, status: "active" };
     }
 
-    return this.evaluationsRepository.find({
-      where,
-      relations: ["assessment", "evaluatee", "evaluatee.department"],
-      order: { created_at: "DESC" },
+    const participants = await this.participantsRepository.find({
+      where: participantsWhere,
+      relations: ["user", "user.department", "assessment"],
     });
+
+    console.log(`[DEBUG] Found ${participants.length} participants who completed self-evaluation but need leader-evaluation`);
+    
+    // 为每个参与者创建或获取评估记录
+    const evaluationsToGive = [];
+    
+    for (const participant of participants) {
+      // 检查是否已有领导评分记录
+      let evaluation = await this.evaluationsRepository.findOne({
+        where: {
+          assessment: { id: participant.assessment.id },
+          evaluator: { id: userId },
+          evaluatee: { id: participant.user.id },
+          type: "leader",
+        },
+        relations: ["assessment", "evaluatee", "evaluatee.department"],
+      });
+
+      // 如果没有评估记录，创建一个草稿记录
+      if (!evaluation) {
+        evaluation = this.evaluationsRepository.create({
+          assessment: participant.assessment,
+          evaluator: { id: userId },
+          evaluatee: participant.user,
+          type: "leader",
+          score: 0,
+          status: "draft",
+        });
+        evaluation = await this.evaluationsRepository.save(evaluation);
+        
+        // 重新加载关联数据
+        evaluation = await this.evaluationsRepository.findOne({
+          where: { id: evaluation.id },
+          relations: ["assessment", "evaluatee", "evaluatee.department"],
+        });
+      }
+
+      evaluationsToGive.push(evaluation);
+    }
+
+    console.log(`[DEBUG] Returning ${evaluationsToGive.length} evaluations to give`);
+    
+    return evaluationsToGive;
   }
 
   // 新增方法：获取评分模板
@@ -466,7 +519,7 @@ export class EvaluationsService {
     let filteredCategories = baseTemplate.categories;
     if (evaluationType === "self") {
       filteredCategories = baseTemplate.categories.filter(
-        (cat) => !cat.leader_only
+        (cat) => !cat.special_attributes?.leader_only
       );
     }
 
@@ -570,7 +623,7 @@ export class EvaluationsService {
         evaluatee: { id: evaluatorId },
         type: "self",
         score: totalScore,
-        feedback: createDetailedSelfEvaluationDto.overall_feedback,
+        feedback: createDetailedSelfEvaluationDto.self_review || createDetailedSelfEvaluationDto.overall_feedback,
         strengths: createDetailedSelfEvaluationDto.strengths,
         improvements: createDetailedSelfEvaluationDto.improvements,
         detailed_scores: createDetailedSelfEvaluationDto.detailed_scores,
@@ -780,7 +833,7 @@ export class EvaluationsService {
 
     // 验证类别完整性
     const requiredCategories = template.categories
-      .filter((cat) => evaluationType === "leader" || !cat.leader_only)
+      .filter((cat) => evaluationType === "leader" || !cat.special_attributes?.leader_only)
       .map((cat) => cat.id);
 
     const providedCategories = detailedScores.map((score) => score.categoryId);
@@ -1313,11 +1366,6 @@ export class EvaluationsService {
     const tasks: EvaluationTaskDto[] = [];
 
     for (const participant of participants) {
-      // 检查是否已完成自评
-      if (participant.self_completed === 1) {
-        continue;
-      }
-
       // 检查是否已有自评记录
       const evaluation = await this.evaluationsRepository.findOne({
         where: {
@@ -1329,7 +1377,9 @@ export class EvaluationsService {
       });
 
       let status: "pending" | "in_progress" | "completed" = "pending";
-      if (evaluation) {
+      if (participant.self_completed === 1) {
+        status = "completed";
+      } else if (evaluation) {
         status =
           evaluation.status === "submitted" ? "completed" : "in_progress";
       }
@@ -1402,11 +1452,6 @@ export class EvaluationsService {
     const tasks: EvaluationTaskDto[] = [];
 
     for (const participant of participants) {
-      // 检查是否已完成领导评分
-      if (participant.leader_completed === 1) {
-        continue;
-      }
-
       // 检查是否已有领导评分记录
       const evaluation = await this.evaluationsRepository.findOne({
         where: {
@@ -1418,7 +1463,9 @@ export class EvaluationsService {
       });
 
       let status: "pending" | "in_progress" | "completed" = "pending";
-      if (evaluation) {
+      if (participant.leader_completed === 1) {
+        status = "completed";
+      } else if (evaluation) {
         status =
           evaluation.status === "submitted" ? "completed" : "in_progress";
       }

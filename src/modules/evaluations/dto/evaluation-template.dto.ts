@@ -44,6 +44,12 @@ export class EvaluationCategoryTemplateDto {
   @ApiProperty({ description: "是否仅限领导评分", required: false })
   leader_only?: boolean;
 
+  @ApiProperty({ description: "特殊属性", required: false })
+  special_attributes?: {
+    leader_only?: boolean;
+    required_role?: string;
+  };
+
   @ApiProperty({ description: "评分项目", type: [EvaluationItemTemplateDto] })
   items: EvaluationItemTemplateDto[];
 }
