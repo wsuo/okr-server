@@ -1,11 +1,13 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddDetailedScoresToEvaluations1731454900000 implements MigrationInterface {
+export class AddDetailedScoresToEvaluations1731454900000
+  implements MigrationInterface
+{
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 检查字段是否已存在
-    const table = await queryRunner.getTable('evaluations');
-    const detailedScoresColumn = table?.findColumnByName('detailed_scores');
-    
+    const table = await queryRunner.getTable("evaluations");
+    const detailedScoresColumn = table?.findColumnByName("detailed_scores");
+
     if (!detailedScoresColumn) {
       await queryRunner.query(`
         ALTER TABLE \`evaluations\` 

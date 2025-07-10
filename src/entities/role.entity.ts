@@ -5,10 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToMany,
-} from 'typeorm';
-import { User } from './user.entity';
+} from "typeorm";
+import { User } from "./user.entity";
 
-@Entity('roles')
+@Entity("roles")
 export class Role {
   @PrimaryGeneratedColumn()
   id: number;
@@ -19,13 +19,13 @@ export class Role {
   @Column({ length: 100 })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description: string;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: "json", nullable: true })
   permissions: string[];
 
-  @Column({ type: 'tinyint', default: 1 })
+  @Column({ type: "tinyint", default: 1 })
   status: number;
 
   @CreateDateColumn()

@@ -8,11 +8,11 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
-import { Assessment } from './assessment.entity';
+} from "typeorm";
+import { User } from "./user.entity";
+import { Assessment } from "./assessment.entity";
 
-@Entity('templates')
+@Entity("templates")
 export class Template {
   @PrimaryGeneratedColumn()
   id: number;
@@ -20,19 +20,19 @@ export class Template {
   @Column({ length: 100 })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description: string;
 
   @Column({ length: 20 })
   type: string;
 
-  @Column({ type: 'json' })
+  @Column({ type: "json" })
   config: any;
 
-  @Column({ type: 'tinyint', default: 0 })
+  @Column({ type: "tinyint", default: 0 })
   is_default: number;
 
-  @Column({ type: 'tinyint', default: 1 })
+  @Column({ type: "tinyint", default: 1 })
   status: number;
 
   @CreateDateColumn()
@@ -45,7 +45,7 @@ export class Template {
   deleted_at: Date;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'created_by' })
+  @JoinColumn({ name: "created_by" })
   creator: User;
 
   @OneToMany(() => Assessment, (assessment) => assessment.template)

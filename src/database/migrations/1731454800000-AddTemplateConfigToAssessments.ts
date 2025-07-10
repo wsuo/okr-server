@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
+import { MigrationInterface, QueryRunner, TableColumn } from "typeorm";
 
 export class AddTemplateConfigToAssessments1731454800000
   implements MigrationInterface
@@ -6,13 +6,13 @@ export class AddTemplateConfigToAssessments1731454800000
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 添加template_config字段到assessments表
     await queryRunner.addColumn(
-      'assessments',
+      "assessments",
       new TableColumn({
-        name: 'template_config',
-        type: 'json',
+        name: "template_config",
+        type: "json",
         isNullable: true,
-        comment: '模板配置快照，考核发布时复制模板配置到此字段',
-      }),
+        comment: "模板配置快照，考核发布时复制模板配置到此字段",
+      })
     );
 
     // 为已发布的考核补充配置数据
@@ -25,6 +25,6 @@ export class AddTemplateConfigToAssessments1731454800000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropColumn('assessments', 'template_config');
+    await queryRunner.dropColumn("assessments", "template_config");
   }
 }

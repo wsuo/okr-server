@@ -4,10 +4,10 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
-} from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import { Request } from 'express';
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import { tap } from "rxjs/operators";
+import { Request } from "express";
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -22,9 +22,11 @@ export class LoggingInterceptor implements NestInterceptor {
       tap(() => {
         const responseTime = Date.now() - now;
         this.logger.log(
-          `${method} ${url} - ${user?.['id'] || 'Anonymous'} - ${responseTime}ms`,
+          `${method} ${url} - ${
+            user?.["id"] || "Anonymous"
+          } - ${responseTime}ms`
         );
-      }),
+      })
     );
   }
 }

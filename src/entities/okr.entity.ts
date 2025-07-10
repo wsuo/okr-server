@@ -7,35 +7,35 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
-import { Assessment } from './assessment.entity';
-import { KeyResult } from './key-result.entity';
+} from "typeorm";
+import { User } from "./user.entity";
+import { Assessment } from "./assessment.entity";
+import { KeyResult } from "./key-result.entity";
 
-@Entity('okrs')
+@Entity("okrs")
 export class Okr {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   objective: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, default: 100.00 })
+  @Column({ type: "decimal", precision: 5, scale: 2, default: 100.0 })
   weight: number;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0.00 })
+  @Column({ type: "decimal", precision: 5, scale: 2, default: 0.0 })
   progress: number;
 
-  @Column({ length: 20, default: 'active' })
+  @Column({ length: 20, default: "active" })
   status: string;
 
-  @Column({ type: 'tinyint', nullable: true })
+  @Column({ type: "tinyint", nullable: true })
   self_rating: number;
 
-  @Column({ type: 'tinyint', nullable: true })
+  @Column({ type: "tinyint", nullable: true })
   leader_rating: number;
 
   @CreateDateColumn()
@@ -45,11 +45,11 @@ export class Okr {
   updated_at: Date;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: "user_id" })
   user: User;
 
   @ManyToOne(() => Assessment)
-  @JoinColumn({ name: 'assessment_id' })
+  @JoinColumn({ name: "assessment_id" })
   assessment: Assessment;
 
   @OneToMany(() => KeyResult, (keyResult) => keyResult.okr)

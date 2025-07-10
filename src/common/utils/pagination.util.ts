@@ -17,7 +17,7 @@ export class PaginationUtil {
   static paginate<T>(
     items: T[],
     total: number,
-    query: PaginationQuery,
+    query: PaginationQuery
   ): PaginatedResult<T> {
     const page = query.page || 1;
     const limit = query.limit || 10;

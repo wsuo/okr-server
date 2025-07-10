@@ -8,10 +8,10 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { User } from './user.entity';
+} from "typeorm";
+import { User } from "./user.entity";
 
-@Entity('departments')
+@Entity("departments")
 export class Department {
   @PrimaryGeneratedColumn()
   id: number;
@@ -19,7 +19,7 @@ export class Department {
   @Column({ length: 100 })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description: string;
 
   @Column({ nullable: true })
@@ -28,7 +28,7 @@ export class Department {
   @Column({ default: 0 })
   sort_order: number;
 
-  @Column({ type: 'tinyint', default: 1 })
+  @Column({ type: "tinyint", default: 1 })
   status: number;
 
   @CreateDateColumn()
@@ -41,7 +41,7 @@ export class Department {
   deleted_at: Date;
 
   @ManyToOne(() => Department, { nullable: true })
-  @JoinColumn({ name: 'parent_id' })
+  @JoinColumn({ name: "parent_id" })
   parent: Department;
 
   @OneToMany(() => Department, (department) => department.parent)

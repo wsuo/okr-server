@@ -4,9 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-} from 'typeorm';
+} from "typeorm";
 
-@Entity('system_configs')
+@Entity("system_configs")
 export class SystemConfig {
   @PrimaryGeneratedColumn()
   id: number;
@@ -14,13 +14,13 @@ export class SystemConfig {
   @Column({ length: 100, unique: true })
   config_key: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   config_value: string;
 
   @Column({ length: 255, nullable: true })
   description: string;
 
-  @Column({ length: 20, default: 'string' })
+  @Column({ length: 20, default: "string" })
   type: string;
 
   @CreateDateColumn()

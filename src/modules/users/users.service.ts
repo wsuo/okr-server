@@ -1,16 +1,23 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Like } from "typeorm";
 
-import { User } from '../../entities/user.entity';
-import { Role } from '../../entities/role.entity';
-import { Department } from '../../entities/department.entity';
-import { BcryptUtil } from '../../common/utils/bcrypt.util';
-import { PaginationUtil, PaginatedResult } from '../../common/utils/pagination.util';
+import { User } from "../../entities/user.entity";
+import { Role } from "../../entities/role.entity";
+import { Department } from "../../entities/department.entity";
+import { BcryptUtil } from "../../common/utils/bcrypt.util";
+import {
+  PaginationUtil,
+  PaginatedResult,
+} from "../../common/utils/pagination.util";
 
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { QueryUsersDto } from './dto/query-users.dto';
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { QueryUsersDto } from "./dto/query-users.dto";
 
 @Injectable()
 export class UsersService {
@@ -20,7 +27,7 @@ export class UsersService {
     @InjectRepository(Role)
     private rolesRepository: Repository<Role>,
     @InjectRepository(Department)
-    private departmentsRepository: Repository<Department>,
+    private departmentsRepository: Repository<Department>
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -29,7 +36,7 @@ export class UsersService {
       where: { username: createUserDto.username },
     });
     if (existingUser) {
-      throw new ConflictException('用户名已存在');
+      throw new ConflictException("用户名已存在");
     }
 
     // 检查邮箱是否已存在
@@ -38,7 +45,7 @@ export class UsersService {
         where: { email: createUserDto.email },
       });
       if (existingEmail) {
-        throw new ConflictException('邮箱已存在');
+        throw new ConflictException("邮箱已存在");
       }
     }
 
@@ -63,29 +70,31 @@ export class UsersService {
     const skip = PaginationUtil.getSkip(page, limit);
 
     const queryBuilder = this.usersRepository
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.department', 'department')
-      .leftJoinAndSelect('user.roles', 'roles')
-      .leftJoinAndSelect('user.leader', 'leader')
-      .where('user.deleted_at IS NULL');
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.department", "department")
+      .leftJoinAndSelect("user.roles", "roles")
+      .leftJoinAndSelect("user.leader", "leader")
+      .where("user.deleted_at IS NULL");
 
     if (department_id) {
-      queryBuilder.andWhere('user.department_id = :department_id', { department_id });
+      queryBuilder.andWhere("user.department_id = :department_id", {
+        department_id,
+      });
     }
 
     if (role) {
-      queryBuilder.andWhere('roles.code = :role', { role });
+      queryBuilder.andWhere("roles.code = :role", { role });
     }
 
     if (search) {
       queryBuilder.andWhere(
-        '(user.name LIKE :search OR user.username LIKE :search OR user.email LIKE :search)',
+        "(user.name LIKE :search OR user.username LIKE :search OR user.email LIKE :search)",
         { search: `%${search}%` }
       );
     }
 
     const [items, total] = await queryBuilder
-      .orderBy('user.created_at', 'DESC')
+      .orderBy("user.created_at", "DESC")
       .skip(skip)
       .take(limit)
       .getManyAndCount();
@@ -96,11 +105,11 @@ export class UsersService {
   async findOne(id: number): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
-      relations: ['department', 'roles', 'leader', 'subordinates'],
+      relations: ["department", "roles", "leader", "subordinates"],
     });
 
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException("用户不存在");
     }
 
     return user;
@@ -115,13 +124,15 @@ export class UsersService {
         where: { email: updateUserDto.email },
       });
       if (existingEmail) {
-        throw new ConflictException('邮箱已存在');
+        throw new ConflictException("邮箱已存在");
       }
     }
 
     // 更新角色
     if (updateUserDto.role_ids) {
-      const roles = await this.rolesRepository.findByIds(updateUserDto.role_ids);
+      const roles = await this.rolesRepository.findByIds(
+        updateUserDto.role_ids
+      );
       user.roles = roles;
     }
 
@@ -147,13 +158,13 @@ export class UsersService {
 
   async getLeaders(): Promise<{ data: User[] }> {
     const leaders = await this.usersRepository
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.department', 'department')
-      .leftJoinAndSelect('user.roles', 'roles')
-      .where('user.deleted_at IS NULL')
-      .andWhere('user.status = 1')
-      .andWhere('roles.code IN (:...codes)', { codes: ['leader', 'boss'] })
-      .orderBy('user.created_at', 'ASC')
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.department", "department")
+      .leftJoinAndSelect("user.roles", "roles")
+      .where("user.deleted_at IS NULL")
+      .andWhere("user.status = 1")
+      .andWhere("roles.code IN (:...codes)", { codes: ["leader", "boss"] })
+      .orderBy("user.created_at", "ASC")
       .getMany();
 
     return { data: leaders };

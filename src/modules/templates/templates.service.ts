@@ -1,12 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, DataSource } from 'typeorm';
-import { Template } from '../../entities/template.entity';
-import { User } from '../../entities/user.entity';
-import { CreateTemplateDto } from './dto/create-template.dto';
-import { UpdateTemplateDto } from './dto/update-template.dto';
-import { QueryTemplatesDto } from './dto/query-templates.dto';
-import { CloneTemplateDto } from './dto/clone-template.dto';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Like, DataSource } from "typeorm";
+import { Template } from "../../entities/template.entity";
+import { User } from "../../entities/user.entity";
+import { CreateTemplateDto } from "./dto/create-template.dto";
+import { UpdateTemplateDto } from "./dto/update-template.dto";
+import { QueryTemplatesDto } from "./dto/query-templates.dto";
+import { CloneTemplateDto } from "./dto/clone-template.dto";
 
 @Injectable()
 export class TemplatesService {
@@ -15,42 +20,51 @@ export class TemplatesService {
     private templatesRepository: Repository<Template>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    private dataSource: DataSource,
+    private dataSource: DataSource
   ) {}
 
   async findAll(query: QueryTemplatesDto) {
-    const { page = 1, limit = 10, name, type, status, is_default, created_by } = query;
+    const {
+      page = 1,
+      limit = 10,
+      name,
+      type,
+      status,
+      is_default,
+      created_by,
+    } = query;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.templatesRepository
-      .createQueryBuilder('template')
-      .leftJoinAndSelect('template.creator', 'creator')
-      .where('template.deleted_at IS NULL');
+      .createQueryBuilder("template")
+      .leftJoinAndSelect("template.creator", "creator")
+      .where("template.deleted_at IS NULL");
 
     if (name) {
-      queryBuilder.andWhere('template.name LIKE :name', { name: `%${name}%` });
+      queryBuilder.andWhere("template.name LIKE :name", { name: `%${name}%` });
     }
 
     if (type) {
-      queryBuilder.andWhere('template.type = :type', { type });
+      queryBuilder.andWhere("template.type = :type", { type });
     }
 
     if (status !== undefined) {
-      queryBuilder.andWhere('template.status = :status', { status });
+      queryBuilder.andWhere("template.status = :status", { status });
     }
 
     if (is_default !== undefined) {
-      queryBuilder.andWhere('template.is_default = :is_default', { is_default });
+      queryBuilder.andWhere("template.is_default = :is_default", {
+        is_default,
+      });
     }
 
     if (created_by) {
-      queryBuilder.andWhere('template.creator.id = :created_by', { created_by });
+      queryBuilder.andWhere("template.creator.id = :created_by", {
+        created_by,
+      });
     }
 
-    queryBuilder
-      .orderBy('template.created_at', 'DESC')
-      .skip(skip)
-      .take(limit);
+    queryBuilder.orderBy("template.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await Promise.all([
       queryBuilder.getMany(),
@@ -80,7 +94,7 @@ export class TemplatesService {
   async findOne(id: number): Promise<Template> {
     const template = await this.templatesRepository.findOne({
       where: { id, deleted_at: null },
-      relations: ['creator'],
+      relations: ["creator"],
     });
 
     if (!template) {
@@ -90,16 +104,21 @@ export class TemplatesService {
     return template;
   }
 
-  async create(createTemplateDto: CreateTemplateDto, creatorId: number): Promise<Template> {
+  async create(
+    createTemplateDto: CreateTemplateDto,
+    creatorId: number
+  ): Promise<Template> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       // 验证创建者是否存在
-      const creator = await this.usersRepository.findOne({ where: { id: creatorId } });
+      const creator = await this.usersRepository.findOne({
+        where: { id: creatorId },
+      });
       if (!creator) {
-        throw new BadRequestException('创建者不存在');
+        throw new BadRequestException("创建者不存在");
       }
 
       // 检查模板名称是否已存在
@@ -107,7 +126,7 @@ export class TemplatesService {
         where: { name: createTemplateDto.name, deleted_at: null },
       });
       if (existingTemplate) {
-        throw new ConflictException('模板名称已存在');
+        throw new ConflictException("模板名称已存在");
       }
 
       // 如果设为默认模板，需要先取消其他同类型的默认模板
@@ -137,7 +156,10 @@ export class TemplatesService {
     }
   }
 
-  async update(id: number, updateTemplateDto: UpdateTemplateDto): Promise<Template> {
+  async update(
+    id: number,
+    updateTemplateDto: UpdateTemplateDto
+  ): Promise<Template> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -151,7 +173,7 @@ export class TemplatesService {
           where: { name: updateTemplateDto.name, deleted_at: null },
         });
         if (existingTemplate) {
-          throw new ConflictException('模板名称已存在');
+          throw new ConflictException("模板名称已存在");
         }
       }
 
@@ -185,19 +207,23 @@ export class TemplatesService {
     // 检查模板是否被考核使用
     const assessmentCount = await this.dataSource
       .createQueryBuilder()
-      .select('COUNT(*)', 'count')
-      .from('assessments', 'a')
-      .where('a.template_id = :id', { id })
+      .select("COUNT(*)", "count")
+      .from("assessments", "a")
+      .where("a.template_id = :id", { id })
       .getRawOne();
 
     if (assessmentCount.count > 0) {
-      throw new BadRequestException('该模板正在被考核使用，无法删除');
+      throw new BadRequestException("该模板正在被考核使用，无法删除");
     }
 
     await this.templatesRepository.softDelete(id);
   }
 
-  async clone(id: number, cloneTemplateDto: CloneTemplateDto, creatorId: number): Promise<Template> {
+  async clone(
+    id: number,
+    cloneTemplateDto: CloneTemplateDto,
+    creatorId: number
+  ): Promise<Template> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -210,7 +236,7 @@ export class TemplatesService {
         where: { name: cloneTemplateDto.name, deleted_at: null },
       });
       if (existingTemplate) {
-        throw new ConflictException('模板名称已存在');
+        throw new ConflictException("模板名称已存在");
       }
 
       // 如果设为默认模板，需要先取消其他同类型的默认模板
@@ -224,7 +250,8 @@ export class TemplatesService {
       // 创建克隆模板
       const clonedTemplate = this.templatesRepository.create({
         name: cloneTemplateDto.name,
-        description: cloneTemplateDto.description || originalTemplate.description,
+        description:
+          cloneTemplateDto.description || originalTemplate.description,
         type: originalTemplate.type,
         config: JSON.parse(JSON.stringify(originalTemplate.config)), // 深拷贝配置
         is_default: cloneTemplateDto.is_default ? 1 : 0,
@@ -251,8 +278,8 @@ export class TemplatesService {
 
     return this.templatesRepository.find({
       where,
-      relations: ['creator'],
-      order: { created_at: 'DESC' },
+      relations: ["creator"],
+      order: { created_at: "DESC" },
     });
   }
 
@@ -286,14 +313,14 @@ export class TemplatesService {
   async getTemplatesByType(type: string) {
     return this.templatesRepository.find({
       where: { type, status: 1, deleted_at: null },
-      relations: ['creator'],
-      order: { is_default: 'DESC', created_at: 'DESC' },
+      relations: ["creator"],
+      order: { is_default: "DESC", created_at: "DESC" },
     });
   }
 
   async getTemplateConfig(id: number) {
     const template = await this.findOne(id);
-    
+
     return {
       id: template.id,
       name: template.name,
@@ -302,7 +329,7 @@ export class TemplatesService {
       config: template.config,
       is_default: template.is_default,
       created_at: template.created_at,
-      creator: template.creator
+      creator: template.creator,
     };
   }
 
@@ -316,47 +343,57 @@ export class TemplatesService {
         id: template.id,
         name: template.name,
         type: template.type,
-        total_score: config.total_score || 100
+        total_score: config.total_score || 100,
       },
       structure: {
-        categories: config.categories?.map(category => ({
-          id: category.id,
-          name: category.name,
-          weight: category.weight,
-          evaluator_types: category.evaluator_types,
-          special_attributes: category.special_attributes || null,
-          items_count: category.items?.length || 0,
-          items: category.items?.map(item => ({
-            id: item.id,
-            name: item.name,
-            weight: item.weight,
-            max_score: item.max_score
-          })) || []
-        })) || []
+        categories:
+          config.categories?.map((category) => ({
+            id: category.id,
+            name: category.name,
+            weight: category.weight,
+            evaluator_types: category.evaluator_types,
+            special_attributes: category.special_attributes || null,
+            items_count: category.items?.length || 0,
+            items:
+              category.items?.map((item) => ({
+                id: item.id,
+                name: item.name,
+                weight: item.weight,
+                max_score: item.max_score,
+              })) || [],
+          })) || [],
       },
       scoring_summary: {
-        method: config.scoring_method || 'weighted',
-        self_weight: config.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
-        leader_weight: config.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
-        calculation: config.scoring_rules?.calculation_method || 'weighted_average'
+        method: config.scoring_method || "weighted",
+        self_weight:
+          config.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
+        leader_weight:
+          config.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
+        calculation:
+          config.scoring_rules?.calculation_method || "weighted_average",
       },
-      usage_notes: config.usage_instructions || {}
+      usage_notes: config.usage_instructions || {},
     };
 
     return preview;
   }
 
-  async validateTemplateStructure(config: any): Promise<{ valid: boolean; errors: string[] }> {
+  async validateTemplateStructure(
+    config: any
+  ): Promise<{ valid: boolean; errors: string[] }> {
     const errors: string[] = [];
 
     // 验证基本结构
     if (!config.categories || !Array.isArray(config.categories)) {
-      errors.push('模板必须包含categories数组');
+      errors.push("模板必须包含categories数组");
       return { valid: false, errors };
     }
 
     // 验证权重总和
-    const totalCategoryWeight = config.categories.reduce((sum, cat) => sum + (cat.weight || 0), 0);
+    const totalCategoryWeight = config.categories.reduce(
+      (sum, cat) => sum + (cat.weight || 0),
+      0
+    );
     if (Math.abs(totalCategoryWeight - 100) > 0.01) {
       errors.push(`考核大项权重总和必须为100%，当前为${totalCategoryWeight}%`);
     }
@@ -364,19 +401,26 @@ export class TemplatesService {
     // 验证每个大项的子项权重
     for (const category of config.categories) {
       if (category.items && Array.isArray(category.items)) {
-        const itemsWeight = category.items.reduce((sum, item) => sum + (item.weight || 0), 0);
+        const itemsWeight = category.items.reduce(
+          (sum, item) => sum + (item.weight || 0),
+          0
+        );
         if (Math.abs(itemsWeight - 100) > 0.01) {
-          errors.push(`"${category.name}"下子项权重总和必须为100%，当前为${itemsWeight}%`);
+          errors.push(
+            `"${category.name}"下子项权重总和必须为100%，当前为${itemsWeight}%`
+          );
         }
       }
     }
 
     // 验证评分规则
     if (config.scoring_rules) {
-      const selfWeight = config.scoring_rules.self_evaluation?.weight_in_final || 0;
-      const leaderWeight = config.scoring_rules.leader_evaluation?.weight_in_final || 0;
+      const selfWeight =
+        config.scoring_rules.self_evaluation?.weight_in_final || 0;
+      const leaderWeight =
+        config.scoring_rules.leader_evaluation?.weight_in_final || 0;
       const totalWeight = selfWeight + leaderWeight;
-      
+
       if (Math.abs(totalWeight - 1.0) > 0.01) {
         errors.push(`自评和领导评价权重总和必须为1.0，当前为${totalWeight}`);
       }

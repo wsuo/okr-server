@@ -5,12 +5,12 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
+} from "@nestjs/common";
+import { Request, Response } from "express";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger('HTTP-Error');
+  private readonly logger = new Logger("HTTP-Error");
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -24,10 +24,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const errorResponse = exception.getResponse();
-      
-      if (typeof errorResponse === 'string') {
+
+      if (typeof errorResponse === "string") {
         message = errorResponse;
-      } else if (typeof errorResponse === 'object' && errorResponse !== null) {
+      } else if (typeof errorResponse === "object" && errorResponse !== null) {
         message = (errorResponse as any).message || exception.message;
         errors = (errorResponse as any).errors || null;
       } else {
@@ -35,8 +35,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
-      message = 'Internal server error';
-      
+      message = "Internal server error";
+
       // 记录未处理的异常
       this.logger.error(
         `🚨 Unhandled Exception: ${(exception as Error).message}`,
@@ -49,7 +49,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       method: request.method,
       url: request.url,
       ip: request.ip,
-      userAgent: request.get('User-Agent'),
+      userAgent: request.get("User-Agent"),
       status,
       message,
       timestamp: new Date().toISOString(),

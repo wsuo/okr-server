@@ -1,9 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Template } from '../../../entities/template.entity';
-import { AssessmentParticipant } from '../../../entities/assessment-participant.entity';
-import { Evaluation } from '../../../entities/evaluation.entity';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Template } from "../../../entities/template.entity";
+import { AssessmentParticipant } from "../../../entities/assessment-participant.entity";
+import { Evaluation } from "../../../entities/evaluation.entity";
 
 export interface ScoreBreakdown {
   category: string;
@@ -36,7 +36,7 @@ export class ScoreCalculationService {
     @InjectRepository(Template)
     private templatesRepository: Repository<Template>,
     @InjectRepository(Evaluation)
-    private evaluationsRepository: Repository<Evaluation>,
+    private evaluationsRepository: Repository<Evaluation>
   ) {}
 
   /**
@@ -45,11 +45,11 @@ export class ScoreCalculationService {
   async calculateParticipantScores(
     assessmentId: number,
     participants: AssessmentParticipant[],
-    templateConfig?: any,
+    templateConfig?: any
   ): Promise<ParticipantScoreResult[]> {
     // 优先使用传入的模板配置（考核的配置快照）
     let template = null;
-    
+
     if (templateConfig) {
       // 使用传入的配置快照创建临时模板对象
       template = { config: templateConfig };
@@ -57,7 +57,7 @@ export class ScoreCalculationService {
       // 如果没有传入配置，则获取考核的模板配置（向后兼容）
       template = await this.getAssessmentTemplate(assessmentId);
       if (!template) {
-        throw new BadRequestException('考核没有关联的模板，无法计算得分');
+        throw new BadRequestException("考核没有关联的模板，无法计算得分");
       }
     }
 
@@ -66,13 +66,13 @@ export class ScoreCalculationService {
     for (const participant of participants) {
       const evaluations = await this.getParticipantEvaluations(
         assessmentId,
-        participant.user.id,
+        participant.user.id
       );
 
       const scoreResult = await this.calculateSingleParticipantScore(
         template,
         participant,
-        evaluations,
+        evaluations
       );
 
       results.push(scoreResult);
@@ -87,11 +87,11 @@ export class ScoreCalculationService {
   private async calculateSingleParticipantScore(
     template: Template,
     participant: AssessmentParticipant,
-    evaluations: Evaluation[],
+    evaluations: Evaluation[]
   ): Promise<ParticipantScoreResult> {
     const config = template.config;
     const scoringRules = config.scoring_rules;
-    
+
     // 验证模板配置
     this.validateTemplateConfig(config);
 
@@ -104,20 +104,23 @@ export class ScoreCalculationService {
       const categoryResult = this.calculateCategoryScore(
         category,
         evaluations,
-        participant.user.id,
+        participant.user.id
       );
-      
+
       scoreBreakdown.push(categoryResult);
-      
+
       // 累加到总分（考虑类别权重）
-      totalSelfScore += categoryResult.categorySelfScore * (category.weight / 100);
-      totalLeaderScore += categoryResult.categoryLeaderScore * (category.weight / 100);
+      totalSelfScore +=
+        categoryResult.categorySelfScore * (category.weight / 100);
+      totalLeaderScore +=
+        categoryResult.categoryLeaderScore * (category.weight / 100);
     }
 
     // 根据评估者权重计算最终得分
     const selfWeight = scoringRules.self_evaluation.weight_in_final;
     const leaderWeight = scoringRules.leader_evaluation.weight_in_final;
-    const finalScore = totalSelfScore * selfWeight + totalLeaderScore * leaderWeight;
+    const finalScore =
+      totalSelfScore * selfWeight + totalLeaderScore * leaderWeight;
 
     return {
       userId: participant.user.id,
@@ -134,7 +137,7 @@ export class ScoreCalculationService {
   private calculateCategoryScore(
     category: any,
     evaluations: Evaluation[],
-    userId: number,
+    userId: number
   ): ScoreBreakdown {
     const items = [];
     let categorySelfScore = 0;
@@ -143,10 +146,10 @@ export class ScoreCalculationService {
     for (const item of category.items) {
       // 获取该项目的自评和领导评分
       const selfEvaluation = evaluations.find(
-        e => e.evaluatee.id === userId && e.type === 'self',
+        (e) => e.evaluatee.id === userId && e.type === "self"
       );
       const leaderEvaluation = evaluations.find(
-        e => e.evaluatee.id === userId && e.type === 'leader',
+        (e) => e.evaluatee.id === userId && e.type === "leader"
       );
 
       // 从评估记录中提取具体项目的得分
@@ -178,7 +181,8 @@ export class ScoreCalculationService {
       items,
       categorySelfScore: Math.round(categorySelfScore * 100) / 100,
       categoryLeaderScore: Math.round(categoryLeaderScore * 100) / 100,
-      categoryFinalScore: Math.round(((categorySelfScore + categoryLeaderScore) / 2) * 100) / 100,
+      categoryFinalScore:
+        Math.round(((categorySelfScore + categoryLeaderScore) / 2) * 100) / 100,
     };
   }
 
@@ -188,11 +192,11 @@ export class ScoreCalculationService {
    */
   private extractItemScore(evaluation: Evaluation, itemId: string): number {
     if (!evaluation) return 0;
-    
+
     // 这里假设评估记录的feedback字段包含详细的项目得分
     // 实际实现需要根据具体的数据结构调整
     try {
-      const feedbackData = JSON.parse(evaluation.feedback || '{}');
+      const feedbackData = JSON.parse(evaluation.feedback || "{}");
       return feedbackData[itemId] || evaluation.score || 0;
     } catch {
       return evaluation.score || 0;
@@ -202,12 +206,14 @@ export class ScoreCalculationService {
   /**
    * 获取考核的模板
    */
-  private async getAssessmentTemplate(assessmentId: number): Promise<Template | null> {
+  private async getAssessmentTemplate(
+    assessmentId: number
+  ): Promise<Template | null> {
     const template = await this.templatesRepository
-      .createQueryBuilder('template')
-      .innerJoin('template.assessments', 'assessment')
-      .where('assessment.id = :assessmentId', { assessmentId })
-      .andWhere('template.deleted_at IS NULL')
+      .createQueryBuilder("template")
+      .innerJoin("template.assessments", "assessment")
+      .where("assessment.id = :assessmentId", { assessmentId })
+      .andWhere("template.deleted_at IS NULL")
       .getOne();
 
     return template;
@@ -218,15 +224,15 @@ export class ScoreCalculationService {
    */
   private async getParticipantEvaluations(
     assessmentId: number,
-    userId: number,
+    userId: number
   ): Promise<Evaluation[]> {
     return this.evaluationsRepository.find({
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        status: 'submitted',
+        status: "submitted",
       },
-      relations: ['evaluator', 'evaluatee'],
+      relations: ["evaluator", "evaluatee"],
     });
   }
 
@@ -235,29 +241,31 @@ export class ScoreCalculationService {
    */
   private validateTemplateConfig(config: any): void {
     if (!config.scoring_rules) {
-      throw new BadRequestException('模板配置缺少评分规则');
+      throw new BadRequestException("模板配置缺少评分规则");
     }
 
     if (!config.categories || !Array.isArray(config.categories)) {
-      throw new BadRequestException('模板配置缺少评估类别');
+      throw new BadRequestException("模板配置缺少评估类别");
     }
 
     // 验证评估者权重总和为1
-    const selfWeight = config.scoring_rules.self_evaluation?.weight_in_final || 0;
-    const leaderWeight = config.scoring_rules.leader_evaluation?.weight_in_final || 0;
-    
+    const selfWeight =
+      config.scoring_rules.self_evaluation?.weight_in_final || 0;
+    const leaderWeight =
+      config.scoring_rules.leader_evaluation?.weight_in_final || 0;
+
     if (Math.abs(selfWeight + leaderWeight - 1) > 0.01) {
-      throw new BadRequestException('评估者权重总和必须为1');
+      throw new BadRequestException("评估者权重总和必须为1");
     }
 
     // 验证类别权重总和为100
     const totalCategoryWeight = config.categories.reduce(
       (sum, cat) => sum + (cat.weight || 0),
-      0,
+      0
     );
-    
+
     if (Math.abs(totalCategoryWeight - 100) > 0.01) {
-      throw new BadRequestException('类别权重总和必须为100');
+      throw new BadRequestException("类别权重总和必须为100");
     }
   }
 

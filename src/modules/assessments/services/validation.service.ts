@@ -1,13 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Assessment } from '../../../entities/assessment.entity';
-import { AssessmentParticipant } from '../../../entities/assessment-participant.entity';
-import { Evaluation } from '../../../entities/evaluation.entity';
-import { Okr } from '../../../entities/okr.entity';
-import { Template } from '../../../entities/template.entity';
-import { User } from '../../../entities/user.entity';
-import { ScoreCalculationService } from './score-calculation.service';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Assessment } from "../../../entities/assessment.entity";
+import { AssessmentParticipant } from "../../../entities/assessment-participant.entity";
+import { Evaluation } from "../../../entities/evaluation.entity";
+import { Okr } from "../../../entities/okr.entity";
+import { Template } from "../../../entities/template.entity";
+import { User } from "../../../entities/user.entity";
+import { ScoreCalculationService } from "./score-calculation.service";
 import {
   EndValidationResponseDto,
   DeleteValidationResponseDto,
@@ -16,7 +16,7 @@ import {
   RelatedDataDto,
   PermissionsDto,
   ParticipantScorePreviewDto,
-} from '../dto/validation-response.dto';
+} from "../dto/validation-response.dto";
 
 @Injectable()
 export class ValidationService {
@@ -31,7 +31,7 @@ export class ValidationService {
     private okrsRepository: Repository<Okr>,
     @InjectRepository(Template)
     private templatesRepository: Repository<Template>,
-    private scoreCalculationService: ScoreCalculationService,
+    private scoreCalculationService: ScoreCalculationService
   ) {}
 
   /**
@@ -39,17 +39,17 @@ export class ValidationService {
    */
   async validateEndAssessment(
     assessmentId: number,
-    currentUserId: number,
+    currentUserId: number
   ): Promise<EndValidationResponseDto> {
     const assessment = await this.assessmentsRepository.findOne({
       where: { id: assessmentId },
-      relations: ['creator', 'template', 'participants', 'participants.user'],
+      relations: ["creator", "template", "participants", "participants.user"],
     });
 
     if (!assessment) {
       return {
         canEnd: false,
-        errors: ['考核不存在'],
+        errors: ["考核不存在"],
         warnings: [],
         participantStatus: [],
         templateConfig: { weightConfig: {}, requiredEvaluations: [] },
@@ -60,31 +60,34 @@ export class ValidationService {
     const warnings: string[] = [];
 
     // 检查考核状态
-    if (assessment.status !== 'active') {
-      errors.push('只能结束进行中的考核');
+    if (assessment.status !== "active") {
+      errors.push("只能结束进行中的考核");
     }
 
     // 检查权限
-    const hasPermission = await this.checkEndPermission(assessment, currentUserId);
+    const hasPermission = await this.checkEndPermission(
+      assessment,
+      currentUserId
+    );
     if (!hasPermission) {
-      errors.push('您没有权限结束此考核');
+      errors.push("您没有权限结束此考核");
     }
 
     // 检查是否超过截止时间
     const now = new Date();
     const deadline = new Date(assessment.deadline);
     if (now > deadline) {
-      warnings.push('考核已超过截止时间');
+      warnings.push("考核已超过截止时间");
     }
 
     // 检查参与者完成状态
     const participantStatus = await this.checkParticipantStatus(assessmentId);
-    
+
     // 检查是否有未完成的评估
     const incompleteParticipants = participantStatus.filter(
-      p => !p.selfCompleted || !p.leaderCompleted,
+      (p) => !p.selfCompleted || !p.leaderCompleted
     );
-    
+
     if (incompleteParticipants.length > 0) {
       warnings.push(`有 ${incompleteParticipants.length} 个参与者未完成评估`);
     }
@@ -93,7 +96,9 @@ export class ValidationService {
     const templateConfig = assessment.template
       ? {
           weightConfig: assessment.template.config,
-          requiredEvaluations: this.getRequiredEvaluations(assessment.template.config),
+          requiredEvaluations: this.getRequiredEvaluations(
+            assessment.template.config
+          ),
         }
       : { weightConfig: {}, requiredEvaluations: [] };
 
@@ -111,24 +116,24 @@ export class ValidationService {
    */
   async validateDeleteAssessment(
     assessmentId: number,
-    currentUserId: number,
+    currentUserId: number
   ): Promise<DeleteValidationResponseDto> {
     const assessment = await this.assessmentsRepository.findOne({
       where: { id: assessmentId },
-      relations: ['creator'],
+      relations: ["creator"],
     });
 
     if (!assessment) {
       return {
         canDelete: false,
-        errors: ['考核不存在'],
+        errors: ["考核不存在"],
         warnings: [],
         relatedData: {
           evaluationsCount: 0,
           okrsCount: 0,
           hasCompletedEvaluations: false,
         },
-        permissions: { canDelete: false, reason: '考核不存在' },
+        permissions: { canDelete: false, reason: "考核不存在" },
       };
     }
 
@@ -136,29 +141,32 @@ export class ValidationService {
     const warnings: string[] = [];
 
     // 检查考核状态
-    if (assessment.status === 'active') {
-      errors.push('无法删除进行中的考核');
+    if (assessment.status === "active") {
+      errors.push("无法删除进行中的考核");
     }
 
     // 检查权限
-    const permissions = await this.checkDeletePermission(assessment, currentUserId);
+    const permissions = await this.checkDeletePermission(
+      assessment,
+      currentUserId
+    );
     if (!permissions.canDelete) {
-      errors.push(permissions.reason || '您没有权限删除此考核');
+      errors.push(permissions.reason || "您没有权限删除此考核");
     }
 
     // 检查相关数据
     const relatedData = await this.checkRelatedData(assessmentId);
-    
+
     if (relatedData.evaluationsCount > 0) {
       warnings.push(`该考核有 ${relatedData.evaluationsCount} 条评估记录`);
     }
-    
+
     if (relatedData.okrsCount > 0) {
       warnings.push(`该考核有 ${relatedData.okrsCount} 个OKR记录`);
     }
-    
+
     if (relatedData.hasCompletedEvaluations) {
-      warnings.push('该考核包含已完成的评估，删除将影响历史记录');
+      warnings.push("该考核包含已完成的评估，删除将影响历史记录");
     }
 
     return {
@@ -173,10 +181,12 @@ export class ValidationService {
   /**
    * 获取得分计算预览
    */
-  async getScorePreview(assessmentId: number): Promise<ScorePreviewResponseDto> {
+  async getScorePreview(
+    assessmentId: number
+  ): Promise<ScorePreviewResponseDto> {
     const assessment = await this.assessmentsRepository.findOne({
       where: { id: assessmentId },
-      relations: ['template'],
+      relations: ["template"],
     });
 
     if (!assessment) {
@@ -192,49 +202,60 @@ export class ValidationService {
     // 获取参与者信息
     const participants = await this.participantsRepository.find({
       where: { assessment: { id: assessmentId }, deleted_at: null },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     // 使用模板配置快照进行得分计算
-    const currentTemplateConfig = assessment.template_config || assessment.template?.config;
-    const scoreResults = await this.scoreCalculationService.calculateParticipantScores(
-      assessmentId,
-      participants,
-      currentTemplateConfig,
-    );
+    const currentTemplateConfig =
+      assessment.template_config || assessment.template?.config;
+    const scoreResults =
+      await this.scoreCalculationService.calculateParticipantScores(
+        assessmentId,
+        participants,
+        currentTemplateConfig
+      );
 
     // 转换为预览格式
-    const participantPreviews: ParticipantScorePreviewDto[] = scoreResults.map(result => ({
-      userId: result.userId,
-      userName: participants.find(p => p.user.id === result.userId)?.user.name || '',
-      selfScore: result.selfScore,
-      leaderScore: result.leaderScore,
-      calculatedFinalScore: result.finalScore,
-      scoreBreakdown: result.scoreBreakdown.map(breakdown => ({
-        category: breakdown.category,
-        categoryName: breakdown.categoryName,
-        categoryWeight: breakdown.categoryWeight,
-        selfWeight: 0.3, // 这里可以从模板配置中获取
-        leaderWeight: 0.7,
-        selfScore: breakdown.categorySelfScore,
-        leaderScore: breakdown.categoryLeaderScore,
-        categoryScore: breakdown.categoryFinalScore,
-      })),
-    }));
+    const participantPreviews: ParticipantScorePreviewDto[] = scoreResults.map(
+      (result) => ({
+        userId: result.userId,
+        userName:
+          participants.find((p) => p.user.id === result.userId)?.user.name ||
+          "",
+        selfScore: result.selfScore,
+        leaderScore: result.leaderScore,
+        calculatedFinalScore: result.finalScore,
+        scoreBreakdown: result.scoreBreakdown.map((breakdown) => ({
+          category: breakdown.category,
+          categoryName: breakdown.categoryName,
+          categoryWeight: breakdown.categoryWeight,
+          selfWeight: 0.3, // 这里可以从模板配置中获取
+          leaderWeight: 0.7,
+          selfScore: breakdown.categorySelfScore,
+          leaderScore: breakdown.categoryLeaderScore,
+          categoryScore: breakdown.categoryFinalScore,
+        })),
+      })
+    );
 
     // 获取模板配置信息用于响应
-    const templateConfig = assessment.template || currentTemplateConfig
-      ? {
-          evaluatorWeights: {
-            self: currentTemplateConfig?.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
-            leader: currentTemplateConfig?.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
-          },
-          categoryWeights: currentTemplateConfig?.categories || [],
-        }
-      : {
-          evaluatorWeights: { self: 0.3, leader: 0.7 },
-          categoryWeights: [],
-        };
+    const templateConfig =
+      assessment.template || currentTemplateConfig
+        ? {
+            evaluatorWeights: {
+              self:
+                currentTemplateConfig?.scoring_rules?.self_evaluation
+                  ?.weight_in_final || 0.3,
+              leader:
+                currentTemplateConfig?.scoring_rules?.leader_evaluation
+                  ?.weight_in_final || 0.7,
+            },
+            categoryWeights: currentTemplateConfig?.categories || [],
+          }
+        : {
+            evaluatorWeights: { self: 0.3, leader: 0.7 },
+            categoryWeights: [],
+          };
 
     return {
       participants: participantPreviews,
@@ -245,7 +266,10 @@ export class ValidationService {
   /**
    * 检查结束考核的权限
    */
-  private async checkEndPermission(assessment: Assessment, currentUserId: number): Promise<boolean> {
+  private async checkEndPermission(
+    assessment: Assessment,
+    currentUserId: number
+  ): Promise<boolean> {
     // 管理员权限检查（这里简化，实际应该检查用户角色）
     if (assessment.creator.id === currentUserId) {
       return true;
@@ -260,7 +284,7 @@ export class ValidationService {
    */
   private async checkDeletePermission(
     assessment: Assessment,
-    currentUserId: number,
+    currentUserId: number
   ): Promise<PermissionsDto> {
     // 只有创建者可以删除
     if (assessment.creator.id === currentUserId) {
@@ -270,17 +294,19 @@ export class ValidationService {
     // 管理员权限检查（这里简化，实际应该检查用户角色）
     return {
       canDelete: false,
-      reason: '只有考核创建者可以删除考核',
+      reason: "只有考核创建者可以删除考核",
     };
   }
 
   /**
    * 检查参与者完成状态
    */
-  private async checkParticipantStatus(assessmentId: number): Promise<ParticipantStatusDto[]> {
+  private async checkParticipantStatus(
+    assessmentId: number
+  ): Promise<ParticipantStatusDto[]> {
     const participants = await this.participantsRepository.find({
       where: { assessment: { id: assessmentId }, deleted_at: null },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     const statusList: ParticipantStatusDto[] = [];
@@ -293,15 +319,15 @@ export class ValidationService {
         },
       });
 
-      const selfEvaluation = evaluations.find(e => e.type === 'self');
-      const leaderEvaluation = evaluations.find(e => e.type === 'leader');
+      const selfEvaluation = evaluations.find((e) => e.type === "self");
+      const leaderEvaluation = evaluations.find((e) => e.type === "leader");
 
       const missingEvaluations: string[] = [];
-      if (!selfEvaluation || selfEvaluation.status !== 'submitted') {
-        missingEvaluations.push('自评');
+      if (!selfEvaluation || selfEvaluation.status !== "submitted") {
+        missingEvaluations.push("自评");
       }
-      if (!leaderEvaluation || leaderEvaluation.status !== 'submitted') {
-        missingEvaluations.push('领导评分');
+      if (!leaderEvaluation || leaderEvaluation.status !== "submitted") {
+        missingEvaluations.push("领导评分");
       }
 
       statusList.push({
@@ -319,21 +345,24 @@ export class ValidationService {
   /**
    * 检查相关数据
    */
-  private async checkRelatedData(assessmentId: number): Promise<RelatedDataDto> {
-    const [evaluationsCount, okrsCount, completedEvaluations] = await Promise.all([
-      this.evaluationsRepository.count({
-        where: { assessment: { id: assessmentId } },
-      }),
-      this.okrsRepository.count({
-        where: { assessment: { id: assessmentId } },
-      }),
-      this.evaluationsRepository.count({
-        where: {
-          assessment: { id: assessmentId },
-          status: 'submitted',
-        },
-      }),
-    ]);
+  private async checkRelatedData(
+    assessmentId: number
+  ): Promise<RelatedDataDto> {
+    const [evaluationsCount, okrsCount, completedEvaluations] =
+      await Promise.all([
+        this.evaluationsRepository.count({
+          where: { assessment: { id: assessmentId } },
+        }),
+        this.okrsRepository.count({
+          where: { assessment: { id: assessmentId } },
+        }),
+        this.evaluationsRepository.count({
+          where: {
+            assessment: { id: assessmentId },
+            status: "submitted",
+          },
+        }),
+      ]);
 
     return {
       evaluationsCount,
@@ -350,10 +379,10 @@ export class ValidationService {
 
     const required: string[] = [];
     if (config.scoring_rules.self_evaluation?.enabled) {
-      required.push('self');
+      required.push("self");
     }
     if (config.scoring_rules.leader_evaluation?.enabled) {
-      required.push('leader');
+      required.push("leader");
     }
 
     return required;

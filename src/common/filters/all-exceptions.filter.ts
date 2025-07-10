@@ -5,8 +5,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
+} from "@nestjs/common";
+import { Request, Response } from "express";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -18,16 +18,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
+    let message = "Internal server error";
     let errors = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 
-      if (typeof exceptionResponse === 'object') {
-        message = exceptionResponse['message'] || message;
-        errors = exceptionResponse['errors'] || null;
+      if (typeof exceptionResponse === "object") {
+        message = exceptionResponse["message"] || message;
+        errors = exceptionResponse["errors"] || null;
       } else {
         message = exceptionResponse;
       }
@@ -38,7 +38,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // 记录错误日志
     this.logger.error(
       `${request.method} ${request.url}`,
-      exception instanceof Error ? exception.stack : exception,
+      exception instanceof Error ? exception.stack : exception
     );
 
     const errorResponse = {
