@@ -497,7 +497,7 @@ export class UsersService {
     // 构建查询
     let queryBuilder = this.assessmentParticipantRepository
       .createQueryBuilder('participant')
-      .leftJoinAndSelect('participant.assessment', 'assessment')
+      .innerJoinAndSelect('participant.assessment', 'assessment')
       .leftJoinAndSelect('assessment.template', 'template')
       .leftJoin('participant.user', 'user')
       .leftJoin('user.leader', 'leader')
@@ -542,6 +542,12 @@ export class UsersService {
     
     for (const participant of participants) {
       const assessment = participant.assessment;
+      
+      // 如果assessment为null，跳过这条记录
+      if (!assessment) {
+        console.warn(`Assessment is null for participant ${participant.id}`);
+        continue;
+      }
       
       // 计算截止日期相关信息
       const now = new Date();
