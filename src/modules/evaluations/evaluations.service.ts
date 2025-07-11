@@ -746,7 +746,7 @@ export class EvaluationsService {
         evaluatee: { id: createDetailedLeaderEvaluationDto.evaluatee_id },
         type: "leader",
         score: totalScore,
-        feedback: createDetailedLeaderEvaluationDto.overall_feedback,
+        feedback: createDetailedLeaderEvaluationDto.leader_review || createDetailedLeaderEvaluationDto.overall_feedback,
         strengths: createDetailedLeaderEvaluationDto.strengths,
         improvements: createDetailedLeaderEvaluationDto.improvements,
         detailed_scores: createDetailedLeaderEvaluationDto.detailed_scores,
@@ -959,6 +959,7 @@ export class EvaluationsService {
     const updateData = {
       score: totalScore,
       feedback:
+        updateEvaluationDraftDto.leader_review ||
         updateEvaluationDraftDto.self_review ||
         updateEvaluationDraftDto.overall_feedback,
       strengths: updateEvaluationDraftDto.strengths,
@@ -1002,6 +1003,7 @@ export class EvaluationsService {
       // 如果已存在，则更新
       const updateDto: UpdateEvaluationDraftDto = {
         self_review: saveEvaluationDraftDto.self_review,
+        leader_review: saveEvaluationDraftDto.leader_review,
         detailed_scores: saveEvaluationDraftDto.detailed_scores,
         overall_feedback: saveEvaluationDraftDto.overall_feedback,
         strengths: saveEvaluationDraftDto.strengths,
@@ -1030,6 +1032,7 @@ export class EvaluationsService {
       type: saveEvaluationDraftDto.type,
       score: totalScore,
       feedback:
+        saveEvaluationDraftDto.leader_review ||
         saveEvaluationDraftDto.self_review ||
         saveEvaluationDraftDto.overall_feedback,
       strengths: saveEvaluationDraftDto.strengths,

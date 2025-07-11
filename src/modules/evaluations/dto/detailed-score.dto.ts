@@ -91,6 +91,11 @@ export class CreateDetailedLeaderEvaluationDto {
   @IsNumber()
   evaluatee_id: number;
 
+  @ApiProperty({ description: "领导评价内容", required: false })
+  @IsString()
+  @IsOptional()
+  leader_review?: string;
+
   @ApiProperty({ description: "详细评分", type: [DetailedCategoryScoreDto] })
   @IsArray()
   @ValidateNested({ each: true })
@@ -132,6 +137,11 @@ export class SaveEvaluationDraftDto {
   @IsOptional()
   self_review?: string;
 
+  @ApiProperty({ description: "领导评价内容", required: false })
+  @IsString()
+  @IsOptional()
+  leader_review?: string;
+
   @ApiProperty({
     description: "详细评分（可以为空，用于草稿）",
     type: [DetailedCategoryScoreDto],
@@ -164,6 +174,11 @@ export class UpdateEvaluationDraftDto {
   @IsString()
   @IsOptional()
   self_review?: string;
+
+  @ApiProperty({ description: "领导评价内容", required: false })
+  @IsString()
+  @IsOptional()
+  leader_review?: string;
 
   @ApiProperty({
     description: "详细评分（可以为空，用于草稿）",
