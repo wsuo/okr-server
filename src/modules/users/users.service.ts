@@ -9,6 +9,8 @@ import { Repository, Like } from "typeorm";
 import { User } from "../../entities/user.entity";
 import { Role } from "../../entities/role.entity";
 import { Department } from "../../entities/department.entity";
+import { Assessment } from "../../entities/assessment.entity";
+import { AssessmentParticipant } from "../../entities/assessment-participant.entity";
 import { BcryptUtil } from "../../common/utils/bcrypt.util";
 import {
   PaginationUtil,
@@ -18,6 +20,7 @@ import {
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { QueryUsersDto } from "./dto/query-users.dto";
+import { TeamMemberDto, TeamMembersResponseDto } from "./dto/team-member.dto";
 
 @Injectable()
 export class UsersService {
@@ -27,7 +30,11 @@ export class UsersService {
     @InjectRepository(Role)
     private rolesRepository: Repository<Role>,
     @InjectRepository(Department)
-    private departmentsRepository: Repository<Department>
+    private departmentsRepository: Repository<Department>,
+    @InjectRepository(Assessment)
+    private assessmentRepository: Repository<Assessment>,
+    @InjectRepository(AssessmentParticipant)
+    private assessmentParticipantRepository: Repository<AssessmentParticipant>
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -168,5 +175,123 @@ export class UsersService {
       .getMany();
 
     return { data: leaders };
+  }
+
+  async getTeamMembers(leaderId: number): Promise<TeamMembersResponseDto> {
+    // 获取该领导的所有下属
+    const subordinates = await this.usersRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.department", "department")
+      .where("user.deleted_at IS NULL")
+      .andWhere("user.status = 1")
+      .andWhere("user.leader_id = :leaderId", { leaderId })
+      .orderBy("user.name", "ASC")
+      .getMany();
+
+    const teamMembers: TeamMemberDto[] = [];
+    let activeAssessmentsCount = 0;
+    let selfCompletedCount = 0;
+    let leaderCompletedCount = 0;
+
+    for (const subordinate of subordinates) {
+      // 查找该员工的最新考核信息（优先active状态，然后是最近的）
+      const activeAssessment = await this.assessmentRepository
+        .createQueryBuilder("assessment")
+        .innerJoin("assessment.participants", "participant")
+        .where("participant.user_id = :userId", { userId: subordinate.id })
+        .andWhere("assessment.deleted_at IS NULL")
+        .andWhere("assessment.status = :status", { status: "active" })
+        .orderBy("assessment.created_at", "DESC")
+        .getOne();
+
+      let latestAssessment = activeAssessment;
+      let hasActiveAssessment = !!activeAssessment;
+      
+      // 如果没有活跃的考核，查找最近的历史考核
+      if (!latestAssessment) {
+        latestAssessment = await this.assessmentRepository
+          .createQueryBuilder("assessment")
+          .innerJoin("assessment.participants", "participant")
+          .where("participant.user_id = :userId", { userId: subordinate.id })
+          .andWhere("assessment.deleted_at IS NULL")
+          .orderBy("assessment.created_at", "DESC")
+          .getOne();
+      }
+
+      let participant: AssessmentParticipant | null = null;
+      if (latestAssessment) {
+        // 获取该员工在此考核中的参与记录
+        participant = await this.assessmentParticipantRepository
+          .createQueryBuilder("participant")
+          .where("participant.user_id = :userId", { userId: subordinate.id })
+          .andWhere("participant.assessment_id = :assessmentId", { 
+            assessmentId: latestAssessment.id 
+          })
+          .andWhere("participant.deleted_at IS NULL")
+          .getOne();
+      }
+
+      // 构建团队成员数据
+      const teamMember: TeamMemberDto = {
+        user_id: subordinate.id,
+        user_name: subordinate.name,
+        email: subordinate.email || '',
+        department: subordinate.department?.name || '',
+        position: subordinate.position || '',
+        has_active_assessment: hasActiveAssessment,
+        is_historical: !hasActiveAssessment && !!latestAssessment,
+        last_updated: participant?.updated_at || subordinate.updated_at,
+      };
+
+      if (latestAssessment) {
+        teamMember.current_assessment = {
+          assessment_id: latestAssessment.id,
+          assessment_title: latestAssessment.title,
+          status: latestAssessment.status,
+          start_date: latestAssessment.start_date,
+          end_date: latestAssessment.end_date,
+          period: latestAssessment.period,
+        };
+
+        if (participant) {
+          teamMember.evaluation_status = {
+            self_completed: participant.self_completed === 1,
+            leader_completed: participant.leader_completed === 1,
+            self_completed_at: participant.self_submitted_at,
+            leader_completed_at: participant.leader_submitted_at,
+            final_score: participant.final_score,
+            self_score: participant.self_score,
+            leader_score: participant.leader_score,
+          };
+
+          // 统计计数
+          if (hasActiveAssessment) {
+            activeAssessmentsCount++;
+            if (participant.self_completed === 1) {
+              selfCompletedCount++;
+            }
+            if (participant.leader_completed === 1) {
+              leaderCompletedCount++;
+            }
+          }
+        } else {
+          // 如果没有参与记录，创建默认状态
+          teamMember.evaluation_status = {
+            self_completed: false,
+            leader_completed: false,
+          };
+        }
+      }
+
+      teamMembers.push(teamMember);
+    }
+
+    return {
+      members: teamMembers,
+      total_members: subordinates.length,
+      active_assessments_count: activeAssessmentsCount,
+      self_completed_count: selfCompletedCount,
+      leader_completed_count: leaderCompletedCount,
+    };
   }
 }

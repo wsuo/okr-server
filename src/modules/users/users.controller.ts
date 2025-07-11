@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -30,6 +31,7 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { QueryUsersDto } from "./dto/query-users.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { TeamMembersResponseDto } from "./dto/team-member.dto";
 
 @ApiTags("用户管理")
 @ApiBearerAuth()
@@ -60,6 +62,33 @@ export class UsersController {
   @Get()
   findAll(@Query() query: QueryUsersDto) {
     return this.usersService.findAll(query);
+  }
+
+  @ApiOperation({ summary: "获取领导用户列表" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: UserListResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @Get("leaders/list")
+  getLeaders() {
+    return this.usersService.getLeaders();
+  }
+
+  @ApiOperation({ summary: "获取团队成员列表" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: TeamMembersResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限" })
+  @Roles("leader", "boss")
+  @UseGuards(RolesGuard)
+  @Get("team-members")
+  getTeamMembers(@Request() req) {
+    return this.usersService.getTeamMembers(req.user.id);
   }
 
   @ApiOperation({ summary: "获取用户详情" })
@@ -134,17 +163,5 @@ export class UsersController {
   @Post(":id/toggle-status")
   toggleStatus(@Param("id") id: string) {
     return this.usersService.toggleStatus(+id);
-  }
-
-  @ApiOperation({ summary: "获取领导用户列表" })
-  @ApiResponse({
-    status: 200,
-    description: "获取成功",
-    type: UserListResponseDto,
-  })
-  @ApiResponse({ status: 401, description: "未授权" })
-  @Get("leaders/list")
-  getLeaders() {
-    return this.usersService.getLeaders();
   }
 }

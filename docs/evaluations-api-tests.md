@@ -499,7 +499,7 @@ curl -X GET "http://localhost:3000/evaluations/subordinates/1" \
     "subordinate_id": 3,
     "subordinate_name": "张三",
     "subordinate_department": "技术部",
-    "status": "in_progress",
+    "status": "draft",
     "self_evaluation_completed": true,
     "self_evaluation_completed_at": "2024-01-15T10:30:00Z",
     "leader_evaluation_id": 5,
@@ -635,6 +635,136 @@ curl -X GET "http://localhost:3000/evaluations/comparison/1/3" \
   }
 }
 ```
+
+## 团队管理接口
+
+### 获取团队成员列表
+
+```http
+GET /users/team-members
+```
+
+**描述：** 获取当前领导的团队成员列表，包含每个成员的考核状态和评估进度。
+
+**权限要求：** 需要 `leader` 或 `boss` 角色权限
+
+**特性：**
+- 自动显示进行中的考核（优先级最高）
+- 如果没有进行中的考核，显示最近的历史考核
+- 提供完整的评估状态和进度信息
+- 包含团队整体统计数据
+
+**测试用例：**
+
+```bash
+# 获取团队成员列表
+curl -X GET "http://localhost:3000/users/team-members" \
+  -H "Authorization: Bearer <leader-token>"
+```
+
+**预期响应：**
+```json
+{
+  "members": [
+    {
+      "user_id": 3,
+      "user_name": "张三",
+      "email": "zhangsan@company.com",
+      "department": "技术部",
+      "position": "高级工程师",
+      "has_active_assessment": true,
+      "is_historical": false,
+      "current_assessment": {
+        "assessment_id": 1,
+        "assessment_title": "2024年度绩效考核",
+        "status": "active",
+        "start_date": "2024-01-01T00:00:00Z",
+        "end_date": "2024-12-31T23:59:59Z",
+        "period": "2024年度"
+      },
+      "evaluation_status": {
+        "self_completed": true,
+        "leader_completed": false,
+        "self_completed_at": "2024-01-15T10:30:00Z",
+        "leader_completed_at": null,
+        "final_score": null,
+        "self_score": 85,
+        "leader_score": null
+      },
+      "last_updated": "2024-01-15T10:30:00Z"
+    },
+    {
+      "user_id": 4,
+      "user_name": "李四",
+      "email": "lisi@company.com",
+      "department": "技术部",
+      "position": "工程师",
+      "has_active_assessment": false,
+      "is_historical": true,
+      "current_assessment": {
+        "assessment_id": 2,
+        "assessment_title": "2023年度绩效考核",
+        "status": "completed",
+        "start_date": "2023-01-01T00:00:00Z",
+        "end_date": "2023-12-31T23:59:59Z",
+        "period": "2023年度"
+      },
+      "evaluation_status": {
+        "self_completed": true,
+        "leader_completed": true,
+        "self_completed_at": "2023-12-15T10:30:00Z",
+        "leader_completed_at": "2023-12-20T14:20:00Z",
+        "final_score": 88.5,
+        "self_score": 85,
+        "leader_score": 90
+      },
+      "last_updated": "2023-12-20T14:20:00Z"
+    }
+  ],
+  "total_members": 2,
+  "active_assessments_count": 1,
+  "self_completed_count": 1,
+  "leader_completed_count": 0
+}
+```
+
+**字段说明：**
+
+- `members`: 团队成员列表
+  - `user_id`: 用户ID
+  - `user_name`: 用户姓名
+  - `email`: 用户邮箱
+  - `department`: 部门名称
+  - `position`: 职位
+  - `has_active_assessment`: 是否有进行中的考核
+  - `is_historical`: 是否显示的是历史考核
+  - `current_assessment`: 当前考核信息（进行中优先，否则显示最近的）
+  - `evaluation_status`: 评估状态和进度
+  - `last_updated`: 最后更新时间
+
+- `total_members`: 团队成员总数
+- `active_assessments_count`: 有进行中考核的成员数量
+- `self_completed_count`: 完成自评的成员数量
+- `leader_completed_count`: 完成领导评分的成员数量
+
+**错误处理：**
+
+```bash
+# 非领导角色访问
+curl -X GET "http://localhost:3000/users/team-members" \
+  -H "Authorization: Bearer <employee-token>"
+# 预期响应：403 Forbidden - "无权限"
+
+# 未授权访问
+curl -X GET "http://localhost:3000/users/team-members"
+# 预期响应：401 Unauthorized
+```
+
+**使用场景：**
+1. **领导页面初始化**: 加载团队成员列表和评估状态
+2. **考核进度监控**: 查看团队成员的考核完成情况
+3. **历史考核回顾**: 当没有进行中的考核时，查看最近的考核结果
+4. **管理决策支持**: 基于统计数据做出管理决策
 
 ## 传统评分接口（兼容性）
 
@@ -872,6 +1002,11 @@ curl -X GET "$BASE_URL/evaluations/my-tasks" \
 # 6. 获取评分进度
 echo "6. 获取评分进度"
 curl -X GET "$BASE_URL/evaluations/progress/1" \
+  -H "$AUTH_HEADER"
+
+# 7. 获取团队成员列表
+echo "7. 获取团队成员列表"
+curl -X GET "$BASE_URL/users/team-members" \
   -H "$AUTH_HEADER"
 
 echo "评估模块API测试完成!"
