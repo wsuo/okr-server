@@ -200,11 +200,14 @@ export class EvaluationsService {
         });
 
         // 更新参与者状态
-        await this.participantsRepository.update(participant.id, {
+        await queryRunner.manager.update(AssessmentParticipant, participant.id, {
           self_completed: 1,
           self_score: createSelfEvaluationDto.score,
           self_submitted_at: new Date(),
         });
+
+        // 检查是否需要计算最终分数
+        await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
         await queryRunner.commitTransaction();
         return this.findOne(existingEvaluation.id);
@@ -227,11 +230,14 @@ export class EvaluationsService {
       const savedEvaluation = await queryRunner.manager.save(evaluation);
 
       // 更新参与者状态
-      await this.participantsRepository.update(participant.id, {
+      await queryRunner.manager.update(AssessmentParticipant, participant.id, {
         self_completed: 1,
         self_score: createSelfEvaluationDto.score,
         self_submitted_at: new Date(),
       });
+
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
       await queryRunner.commitTransaction();
       return this.findOne(savedEvaluation.id);
@@ -305,11 +311,14 @@ export class EvaluationsService {
         });
 
         // 更新参与者状态
-        await this.participantsRepository.update(participant.id, {
+        await queryRunner.manager.update(AssessmentParticipant, participant.id, {
           leader_completed: 1,
           leader_score: createLeaderEvaluationDto.score,
           leader_submitted_at: new Date(),
         });
+
+        // 检查是否需要计算最终分数
+        await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
         await queryRunner.commitTransaction();
         return this.findOne(existingEvaluation.id);
@@ -332,11 +341,14 @@ export class EvaluationsService {
       const savedEvaluation = await queryRunner.manager.save(evaluation);
 
       // 更新参与者状态
-      await this.participantsRepository.update(participant.id, {
+      await queryRunner.manager.update(AssessmentParticipant, participant.id, {
         leader_completed: 1,
         leader_score: createLeaderEvaluationDto.score,
         leader_submitted_at: new Date(),
       });
+
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
       await queryRunner.commitTransaction();
       return this.findOne(savedEvaluation.id);
@@ -1886,6 +1898,97 @@ export class EvaluationsService {
       final_result: finalResult,
       comparison_analysis: comparisonAnalysis,
       timeline,
+    };
+  }
+
+  /**
+   * 检查是否双方评分都完成，如果完成则自动计算最终分数
+   */
+  private async calculateFinalScoreIfReady(queryRunner: any, participantId: number): Promise<void> {
+    // 重新获取参与者信息，确保获取最新状态
+    const participant = await queryRunner.manager.findOne(AssessmentParticipant, {
+      where: { id: participantId },
+      relations: ['assessment'],
+    });
+
+    if (!participant) {
+      return;
+    }
+
+    // 检查是否双方评分都已完成
+    if (participant.self_completed === 1 && participant.leader_completed === 1) {
+      try {
+        // 获取权重配置
+        const weightConfig = await this.getWeightConfig(participant.assessment.id);
+        
+        // 计算最终分数
+        const finalScore = participant.self_score * weightConfig.self_weight + 
+                          participant.leader_score * weightConfig.leader_weight;
+        
+        // 保留两位小数
+        const roundedFinalScore = Math.round(finalScore * 100) / 100;
+        
+        // 更新最终分数
+        await queryRunner.manager.update(AssessmentParticipant, participantId, {
+          final_score: roundedFinalScore,
+        });
+
+        console.log(`自动计算最终分数 - 参与者ID: ${participantId}, 自评: ${participant.self_score}, 领导评分: ${participant.leader_score}, 最终分数: ${roundedFinalScore}`);
+      } catch (error) {
+        console.error(`计算最终分数失败 - 参与者ID: ${participantId}`, error);
+        // 不抛出错误，避免影响主流程
+      }
+    }
+  }
+
+  /**
+   * 获取权重配置，优先使用assessment的template_config
+   */
+  private async getWeightConfig(assessmentId: number): Promise<{ self_weight: number; leader_weight: number }> {
+    try {
+      // 获取考核信息，包含模板配置快照
+      const assessment = await this.assessmentsRepository.findOne({
+        where: { id: assessmentId },
+        relations: ['template'],
+      });
+
+      if (!assessment) {
+        throw new Error('考核不存在');
+      }
+
+      let templateConfig: any = null;
+
+      // 优先使用考核的模板配置快照
+      if (assessment.template_config) {
+        templateConfig = typeof assessment.template_config === 'string' 
+          ? JSON.parse(assessment.template_config) 
+          : assessment.template_config;
+      }
+      // 如果没有快照，使用关联的模板配置
+      else if (assessment.template?.config) {
+        templateConfig = typeof assessment.template.config === 'string' 
+          ? JSON.parse(assessment.template.config) 
+          : assessment.template.config;
+      }
+
+      // 从配置中提取权重
+      if (templateConfig?.scoring_rules) {
+        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
+        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
+        
+        return {
+          self_weight: selfWeight,
+          leader_weight: leaderWeight,
+        };
+      }
+    } catch (error) {
+      console.warn(`解析权重配置失败 (assessment_id: ${assessmentId}):`, error);
+    }
+
+    // 使用默认权重配置
+    return {
+      self_weight: 0.3,  // 30%
+      leader_weight: 0.7, // 70%
     };
   }
 }
