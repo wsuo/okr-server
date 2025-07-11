@@ -31,6 +31,10 @@ import {
   UpdateEvaluationDraftDto,
 } from "./dto/detailed-score.dto";
 import {
+  CompleteEvaluationQueryDto,
+  CompleteEvaluationResponseDto,
+} from "./dto/complete-evaluation.dto";
+import {
   EvaluationTemplateResponseDto,
   UserEvaluationTemplateDto,
 } from "./dto/evaluation-template.dto";
@@ -297,6 +301,30 @@ export class EvaluationsController {
       +assessmentId,
       +userId,
       user.id
+    );
+  }
+
+  @Get("assessment/:assessmentId/user/:userId/complete")
+  @ApiOperation({ summary: "获取完整评估详情" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: CompleteEvaluationResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限" })
+  @ApiResponse({ status: 404, description: "评估记录不存在" })
+  @Roles("leader", "boss", "admin")
+  @UseGuards(RolesGuard)
+  getCompleteEvaluation(
+    @Param("assessmentId") assessmentId: string,
+    @Param("userId") userId: string,
+    @Query() query: CompleteEvaluationQueryDto
+  ) {
+    return this.evaluationsService.getCompleteEvaluation(
+      +assessmentId,
+      +userId,
+      query
     );
   }
 }

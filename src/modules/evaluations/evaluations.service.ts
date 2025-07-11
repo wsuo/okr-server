@@ -29,6 +29,17 @@ import {
   EvaluationProgressDto,
   SubordinateEvaluationTaskDto,
 } from "./dto/evaluation-task.dto";
+import {
+  CompleteEvaluationQueryDto,
+  CompleteEvaluationResponseDto,
+  AssessmentInfoDto,
+  EvaluateeInfoDto,
+  DetailedEvaluationDto,
+  LeaderEvaluationDto,
+  FinalResultDto,
+  ComparisonAnalysisDto,
+  TimelineEventDto,
+} from "./dto/complete-evaluation.dto";
 
 @Injectable()
 export class EvaluationsService {
@@ -1580,5 +1591,273 @@ export class EvaluationsService {
     }
 
     return analysis;
+  }
+
+  async getCompleteEvaluation(
+    assessmentId: number,
+    userId: number,
+    query: CompleteEvaluationQueryDto
+  ): Promise<CompleteEvaluationResponseDto> {
+    // 获取考核信息
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: ['template'],
+    });
+
+    if (!assessment) {
+      throw new NotFoundException('考核不存在');
+    }
+
+    // 获取被评估人信息
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['department'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    // 获取考核参与记录
+    const participant = await this.participantsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        user: { id: userId },
+      },
+      relations: ['assessment', 'user'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('该用户未参与此考核');
+    }
+
+    // 获取自评记录
+    const selfEvaluation = await this.evaluationsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        evaluatee: { id: userId },
+        type: 'self',
+      },
+    });
+
+    // 获取领导评分记录
+    const leaderEvaluation = await this.evaluationsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        evaluatee: { id: userId },
+        type: 'leader',
+      },
+      relations: ['evaluator'],
+    });
+
+    // 构建考核信息
+    const assessmentInfo: AssessmentInfoDto = {
+      assessment_id: assessment.id,
+      assessment_title: assessment.title,
+      period: assessment.period,
+      template_name: assessment.template?.name || '标准绩效考核模板',
+      start_date: assessment.start_date,
+      end_date: assessment.end_date,
+      deadline: assessment.end_date,
+      status: assessment.status,
+    };
+
+    // 构建被评估人信息
+    const evaluateeInfo: EvaluateeInfoDto = {
+      user_id: user.id,
+      user_name: user.name,
+      department: user.department?.name || '',
+      position: user.position || '',
+      email: user.email || '',
+    };
+
+    // 获取评分模板用于详细信息
+    let template: any = null;
+    if (query.include_details) {
+      try {
+        template = await this.getEvaluationTemplate(assessmentId);
+      } catch (error) {
+        console.warn('Failed to get evaluation template:', error);
+      }
+    }
+
+    // 构建自评详情
+    let selfEvaluationDetail: DetailedEvaluationDto = {
+      evaluation_id: selfEvaluation?.id || 0,
+      completed: participant.self_completed === 1,
+      submitted_at: participant.self_submitted_at || new Date(),
+      overall_score: parseFloat(participant.self_score?.toString() || '0'),
+      review: selfEvaluation?.self_review || '',
+      strengths: selfEvaluation?.strengths || '',
+      improvements: selfEvaluation?.improvements || '',
+      detailed_scores: [],
+    };
+
+    // 构建领导评分详情
+    let leaderEvaluationDetail: LeaderEvaluationDto = {
+      evaluation_id: leaderEvaluation?.id || 0,
+      leader_id: leaderEvaluation?.evaluator?.id || 0,
+      leader_name: leaderEvaluation?.evaluator?.name || '',
+      completed: participant.leader_completed === 1,
+      submitted_at: participant.leader_submitted_at || new Date(),
+      overall_score: parseFloat(participant.leader_score?.toString() || '0'),
+      review: leaderEvaluation?.leader_review || '',
+      strengths: leaderEvaluation?.strengths || '',
+      improvements: leaderEvaluation?.improvements || '',
+      detailed_scores: [],
+    };
+
+    // 如果包含详细评分信息，解析详细分数
+    if (query.include_details && template) {
+      if (selfEvaluation?.detailed_scores) {
+        try {
+          const selfDetailedScores = JSON.parse(selfEvaluation.detailed_scores);
+          selfEvaluationDetail.detailed_scores = await this.enrichDetailedScoresWithTemplate(
+            assessmentId,
+            selfDetailedScores
+          );
+        } catch (error) {
+          console.warn('Failed to parse self evaluation detailed scores:', error);
+        }
+      }
+
+      if (leaderEvaluation?.detailed_scores) {
+        try {
+          const leaderDetailedScores = JSON.parse(leaderEvaluation.detailed_scores);
+          leaderEvaluationDetail.detailed_scores = await this.enrichDetailedScoresWithTemplate(
+            assessmentId,
+            leaderDetailedScores
+          );
+        } catch (error) {
+          console.warn('Failed to parse leader evaluation detailed scores:', error);
+        }
+      }
+    }
+
+    // 构建最终结果
+    const finalScore = parseFloat(participant.final_score?.toString() || '0');
+    let finalLevel = '';
+    if (finalScore >= 90) finalLevel = '优秀';
+    else if (finalScore >= 80) finalLevel = '良好';
+    else if (finalScore >= 70) finalLevel = '合格';
+    else finalLevel = '待改进';
+
+    const finalResult: FinalResultDto = {
+      final_score: finalScore,
+      final_level: finalLevel,
+      calculation_method: 'weighted_average',
+      weight_config: {
+        self_weight: 30,
+        leader_weight: 70,
+      },
+      calculation_details: {
+        self_weighted_score: selfEvaluationDetail.overall_score * 0.3,
+        leader_weighted_score: leaderEvaluationDetail.overall_score * 0.7,
+        total_score: selfEvaluationDetail.overall_score * 0.3 + leaderEvaluationDetail.overall_score * 0.7,
+        rounded_score: finalScore,
+      },
+      completed_at: participant.leader_submitted_at || participant.updated_at,
+    };
+
+    // 构建对比分析
+    let comparisonAnalysis: ComparisonAnalysisDto | undefined;
+    if (query.include_comparison && selfEvaluation && leaderEvaluation) {
+      const overallDifference = Math.abs(selfEvaluationDetail.overall_score - leaderEvaluationDetail.overall_score);
+      const agreementLevel = overallDifference <= 5 ? 'high' : overallDifference <= 10 ? 'medium' : 'low';
+
+      comparisonAnalysis = {
+        overall_difference: Math.round(overallDifference * 100) / 100,
+        agreement_level: agreementLevel,
+        category_comparisons: [],
+      };
+
+      // 如果有详细评分，进行分类对比
+      if (selfEvaluationDetail.detailed_scores && leaderEvaluationDetail.detailed_scores) {
+        for (const selfCategory of selfEvaluationDetail.detailed_scores) {
+          const leaderCategory = leaderEvaluationDetail.detailed_scores.find(
+            (cat: any) => cat.categoryId === selfCategory.categoryId
+          );
+
+          if (leaderCategory) {
+            const categoryDiff = Math.abs(selfCategory.categoryScore - leaderCategory.categoryScore);
+            const categoryAgreement = categoryDiff <= 5 ? 'high' : categoryDiff <= 10 ? 'medium' : 'low';
+
+            const itemComparisons = selfCategory.items.map((selfItem: any) => {
+              const leaderItem = leaderCategory.items.find((item: any) => item.itemId === selfItem.itemId);
+              const itemDiff = leaderItem ? Math.abs(selfItem.score - leaderItem.score) : 0;
+              const itemAgreement = itemDiff <= 5 ? 'high' : itemDiff <= 10 ? 'medium' : 'low';
+
+              return {
+                item_id: selfItem.itemId,
+                item_name: selfItem.itemName || '',
+                self_score: selfItem.score,
+                leader_score: leaderItem?.score || 0,
+                difference: Math.round(itemDiff * 100) / 100,
+                agreement: itemAgreement,
+              };
+            });
+
+            comparisonAnalysis.category_comparisons.push({
+              category_id: selfCategory.categoryId,
+              category_name: selfCategory.categoryName || '',
+              self_score: selfCategory.categoryScore,
+              leader_score: leaderCategory.categoryScore,
+              difference: Math.round(categoryDiff * 100) / 100,
+              agreement: categoryAgreement,
+              item_comparisons: itemComparisons,
+            });
+          }
+        }
+      }
+    }
+
+    // 构建时间线
+    const timeline: TimelineEventDto[] = [
+      {
+        event: 'assessment_created',
+        description: '考核创建',
+        timestamp: assessment.created_at,
+        actor: '系统',
+      },
+    ];
+
+    if (participant.self_submitted_at) {
+      timeline.push({
+        event: 'self_evaluation_submitted',
+        description: '员工提交自评',
+        timestamp: participant.self_submitted_at,
+        actor: user.name,
+      });
+    }
+
+    if (participant.leader_submitted_at && leaderEvaluation?.evaluator) {
+      timeline.push({
+        event: 'leader_evaluation_submitted',
+        description: '领导完成评分',
+        timestamp: participant.leader_submitted_at,
+        actor: leaderEvaluation.evaluator.name,
+      });
+    }
+
+    if (participant.self_completed === 1 && participant.leader_completed === 1) {
+      timeline.push({
+        event: 'assessment_completed',
+        description: '考核完成',
+        timestamp: participant.leader_submitted_at || participant.updated_at,
+        actor: '系统',
+      });
+    }
+
+    timeline.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+    return {
+      assessment_info: assessmentInfo,
+      evaluatee_info: evaluateeInfo,
+      self_evaluation: selfEvaluationDetail,
+      leader_evaluation: leaderEvaluationDetail,
+      final_result: finalResult,
+      comparison_analysis: comparisonAnalysis,
+      timeline,
+    };
   }
 }

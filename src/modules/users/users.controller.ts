@@ -32,6 +32,8 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { QueryUsersDto } from "./dto/query-users.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { TeamMembersResponseDto } from "./dto/team-member.dto";
+import { EvaluationStatsQueryDto, EvaluationStatsResponseDto } from "./dto/evaluation-stats.dto";
+import { AssessmentsHistoryQueryDto, AssessmentsHistoryResponseDto } from "./dto/assessments-history.dto";
 
 @ApiTags("用户管理")
 @ApiBearerAuth()
@@ -89,6 +91,44 @@ export class UsersController {
   @Get("team-members")
   getTeamMembers(@Request() req) {
     return this.usersService.getTeamMembers(req.user.id);
+  }
+
+  @ApiOperation({ summary: "获取员工评估统计" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: EvaluationStatsResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限" })
+  @ApiResponse({ status: 404, description: "用户不存在" })
+  @Roles("leader", "boss", "admin")
+  @UseGuards(RolesGuard)
+  @Get(":userId/evaluation-stats")
+  getEvaluationStats(
+    @Param("userId") userId: string,
+    @Query() query: EvaluationStatsQueryDto
+  ) {
+    return this.usersService.getEvaluationStats(+userId, query);
+  }
+
+  @ApiOperation({ summary: "获取员工考核历史" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: AssessmentsHistoryResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限" })
+  @ApiResponse({ status: 404, description: "用户不存在" })
+  @Roles("leader", "boss", "admin")
+  @UseGuards(RolesGuard)
+  @Get(":userId/assessments-history")
+  getAssessmentsHistory(
+    @Param("userId") userId: string,
+    @Query() query: AssessmentsHistoryQueryDto
+  ) {
+    return this.usersService.getAssessmentsHistory(+userId, query);
   }
 
   @ApiOperation({ summary: "获取用户详情" })
