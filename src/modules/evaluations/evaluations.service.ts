@@ -1687,7 +1687,7 @@ export class EvaluationsService {
       completed: participant.self_completed === 1,
       submitted_at: participant.self_submitted_at || new Date(),
       overall_score: parseFloat(participant.self_score?.toString() || '0'),
-      review: selfEvaluation?.self_review || '',
+      review: selfEvaluation?.feedback || '',
       strengths: selfEvaluation?.strengths || '',
       improvements: selfEvaluation?.improvements || '',
       detailed_scores: [],
@@ -1701,7 +1701,7 @@ export class EvaluationsService {
       completed: participant.leader_completed === 1,
       submitted_at: participant.leader_submitted_at || new Date(),
       overall_score: parseFloat(participant.leader_score?.toString() || '0'),
-      review: leaderEvaluation?.leader_review || '',
+      review: leaderEvaluation?.feedback || '',
       strengths: leaderEvaluation?.strengths || '',
       improvements: leaderEvaluation?.improvements || '',
       detailed_scores: [],
@@ -1775,11 +1775,11 @@ export class EvaluationsService {
       if (selfEvaluationDetail.detailed_scores && leaderEvaluationDetail.detailed_scores) {
         for (const selfCategory of selfEvaluationDetail.detailed_scores) {
           const leaderCategory = leaderEvaluationDetail.detailed_scores.find(
-            (cat: any) => cat.categoryId === selfCategory.categoryId
+            (cat: any) => cat.category_id === selfCategory.category_id
           );
 
           if (leaderCategory) {
-            const categoryDiff = Math.abs(selfCategory.categoryScore - leaderCategory.categoryScore);
+            const categoryDiff = Math.abs(selfCategory.category_score - leaderCategory.category_score);
             const categoryAgreement = categoryDiff <= 5 ? 'high' : categoryDiff <= 10 ? 'medium' : 'low';
 
             const itemComparisons = selfCategory.items.map((selfItem: any) => {
@@ -1798,10 +1798,10 @@ export class EvaluationsService {
             });
 
             comparisonAnalysis.category_comparisons.push({
-              category_id: selfCategory.categoryId,
-              category_name: selfCategory.categoryName || '',
-              self_score: selfCategory.categoryScore,
-              leader_score: leaderCategory.categoryScore,
+              category_id: selfCategory.category_id,
+              category_name: selfCategory.category_name || '',
+              self_score: selfCategory.category_score,
+              leader_score: leaderCategory.category_score,
               difference: Math.round(categoryDiff * 100) / 100,
               agreement: categoryAgreement,
               item_comparisons: itemComparisons,

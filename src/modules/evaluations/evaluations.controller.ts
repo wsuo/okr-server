@@ -19,6 +19,8 @@ import {
 } from "@nestjs/swagger";
 import { EvaluationsService } from "./evaluations.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CreateSelfEvaluationDto } from "./dto/create-self-evaluation.dto";
 import { CreateLeaderEvaluationDto } from "./dto/create-leader-evaluation.dto";
