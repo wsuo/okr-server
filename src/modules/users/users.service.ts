@@ -387,9 +387,9 @@ export class UsersService {
       .map(participant => ({
         assessment_id: participant.assessment.id,
         assessment_title: participant.assessment.title,
-        final_score: parseFloat(participant.final_score?.toString() || '0'),
-        self_score: parseFloat(participant.self_score?.toString() || '0'),
-        leader_score: parseFloat(participant.leader_score?.toString() || '0'),
+        final_score: Math.round(parseFloat(participant.final_score?.toString() || '0') * 100) / 100,
+        self_score: Math.round(parseFloat(participant.self_score?.toString() || '0') * 100) / 100,
+        leader_score: Math.round(parseFloat(participant.leader_score?.toString() || '0') * 100) / 100,
         completed_at: participant.leader_submitted_at || participant.self_submitted_at,
         period: participant.assessment.period,
       }));
@@ -641,19 +641,19 @@ export class UsersService {
         created_at: assessment.created_at,
         self_evaluation: {
           completed: participant.self_completed === 1,
-          score: participant.self_score ? parseFloat(participant.self_score.toString()) : undefined,
+          score: participant.self_score ? Math.round(parseFloat(participant.self_score.toString()) * 100) / 100 : undefined,
           submitted_at: participant.self_submitted_at,
           last_updated: participant.self_submitted_at,
         },
         leader_evaluation: {
           completed: participant.leader_completed === 1,
-          score: participant.leader_score ? parseFloat(participant.leader_score.toString()) : undefined,
+          score: participant.leader_score ? Math.round(parseFloat(participant.leader_score.toString()) * 100) / 100 : undefined,
           leader_id: leaderInfo?.id,
           leader_name: leaderInfo?.name,
           submitted_at: participant.leader_submitted_at,
           last_updated: participant.leader_submitted_at,
         },
-        final_score: participant.final_score ? parseFloat(participant.final_score.toString()) : undefined,
+        final_score: participant.final_score ? Math.round(parseFloat(participant.final_score.toString()) * 100) / 100 : undefined,
         final_level: finalLevel,
         weight_config: weightConfig,
         is_overdue: isOverdue,
@@ -681,7 +681,7 @@ export class UsersService {
       .filter(p => p.final_score)
       .map(p => parseFloat(p.final_score.toString()));
     const averageFinalScore = completedScores.length > 0 
-      ? completedScores.reduce((sum, score) => sum + score, 0) / completedScores.length 
+      ? Math.round((completedScores.reduce((sum, score) => sum + score, 0) / completedScores.length) * 100) / 100
       : 0;
 
     const summary: AssessmentHistorySummaryDto = {
