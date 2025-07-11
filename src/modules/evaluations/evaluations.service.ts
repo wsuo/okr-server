@@ -1284,12 +1284,28 @@ export class EvaluationsService {
     userId: number,
     currentUserId: number
   ): Promise<any> {
-    // 权限检查
-    const hasPermission = userId === currentUserId; // 只能查看自己的对比
-    // TODO: 添加管理员和直属领导权限
-
+    // 权限检查：用户可以查看自己的，领导可以查看下属的
+    let hasPermission = false;
+    
+    // 1. 用户查看自己的评分对比
+    if (userId === currentUserId) {
+      hasPermission = true;
+    } else {
+      // 2. 检查是否为直属领导关系
+      const evaluatee = await this.usersRepository.findOne({
+        where: { id: userId },
+        relations: ["leader"],
+      });
+      
+      if (evaluatee && evaluatee.leader?.id === currentUserId) {
+        hasPermission = true;
+      }
+    }
+    
+    // TODO: 添加管理员权限检查
+    
     if (!hasPermission) {
-      throw new BadRequestException("您只能查看自己的评分对比");
+      throw new BadRequestException("您没有权限查看此评分对比");
     }
 
     // 获取自评和领导评分
@@ -1527,10 +1543,18 @@ export class EvaluationsService {
       const templateCategory = template.categories.find(
         (cat) => cat.id === categoryScore.categoryId
       );
-      if (!templateCategory) return categoryScore;
+      if (!templateCategory) return {
+        ...categoryScore,
+        categoryScore: Math.round(categoryScore.categoryScore * 100) / 100,
+        items: categoryScore.items?.map((itemScore) => ({
+          ...itemScore,
+          score: Math.round(itemScore.score * 100) / 100,
+        })) || [],
+      };
 
       return {
         ...categoryScore,
+        categoryScore: Math.round(categoryScore.categoryScore * 100) / 100,
         categoryName: templateCategory.name,
         categoryWeight: templateCategory.weight,
         items: categoryScore.items.map((itemScore) => {
@@ -1539,6 +1563,7 @@ export class EvaluationsService {
           );
           return {
             ...itemScore,
+            score: Math.round(itemScore.score * 100) / 100,
             itemName: templateItem?.name || "",
             itemWeight: templateItem?.weight || 0,
             maxScore: templateItem?.max_score || 100,
@@ -1562,7 +1587,7 @@ export class EvaluationsService {
       selfEvaluation.score - leaderEvaluation.score
     );
     const analysis = {
-      overall_score_difference: scoreDifference,
+      overall_score_difference: Math.round(scoreDifference * 100) / 100,
       agreement_level:
         scoreDifference <= 5
           ? "high"
@@ -1585,9 +1610,9 @@ export class EvaluationsService {
           );
           analysis.category_differences.push({
             categoryId: selfCategory.categoryId,
-            difference: categoryDiff,
-            self_score: selfCategory.categoryScore,
-            leader_score: leaderCategory.categoryScore,
+            difference: Math.round(categoryDiff * 100) / 100,
+            self_score: Math.round(selfCategory.categoryScore * 100) / 100,
+            leader_score: Math.round(leaderCategory.categoryScore * 100) / 100,
           });
         }
       }
@@ -1689,7 +1714,7 @@ export class EvaluationsService {
       evaluation_id: selfEvaluation?.id || 0,
       completed: participant.self_completed === 1,
       submitted_at: participant.self_submitted_at || new Date(),
-      overall_score: parseFloat(participant.self_score?.toString() || '0'),
+      overall_score: Math.round(parseFloat(participant.self_score?.toString() || '0') * 100) / 100,
       review: selfEvaluation?.feedback || '',
       strengths: selfEvaluation?.strengths || '',
       improvements: selfEvaluation?.improvements || '',
@@ -1703,7 +1728,7 @@ export class EvaluationsService {
       leader_name: leaderEvaluation?.evaluator?.name || '',
       completed: participant.leader_completed === 1,
       submitted_at: participant.leader_submitted_at || new Date(),
-      overall_score: parseFloat(participant.leader_score?.toString() || '0'),
+      overall_score: Math.round(parseFloat(participant.leader_score?.toString() || '0') * 100) / 100,
       review: leaderEvaluation?.feedback || '',
       strengths: leaderEvaluation?.strengths || '',
       improvements: leaderEvaluation?.improvements || '',
@@ -1738,7 +1763,7 @@ export class EvaluationsService {
     }
 
     // 构建最终结果
-    const finalScore = parseFloat(participant.final_score?.toString() || '0');
+    const finalScore = Math.round(parseFloat(participant.final_score?.toString() || '0') * 100) / 100;
     let finalLevel = '';
     if (finalScore >= 90) finalLevel = '优秀';
     else if (finalScore >= 80) finalLevel = '良好';
@@ -1754,9 +1779,9 @@ export class EvaluationsService {
         leader_weight: 70,
       },
       calculation_details: {
-        self_weighted_score: selfEvaluationDetail.overall_score * 0.3,
-        leader_weighted_score: leaderEvaluationDetail.overall_score * 0.7,
-        total_score: selfEvaluationDetail.overall_score * 0.3 + leaderEvaluationDetail.overall_score * 0.7,
+        self_weighted_score: Math.round(selfEvaluationDetail.overall_score * 0.3 * 100) / 100,
+        leader_weighted_score: Math.round(leaderEvaluationDetail.overall_score * 0.7 * 100) / 100,
+        total_score: Math.round((selfEvaluationDetail.overall_score * 0.3 + leaderEvaluationDetail.overall_score * 0.7) * 100) / 100,
         rounded_score: finalScore,
       },
       completed_at: participant.leader_submitted_at || participant.updated_at,
