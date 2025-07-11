@@ -335,15 +335,32 @@ export class UsersService {
     const participants = await participantsQuery.getMany();
 
     const totalAssessments = participants.length;
+    
+    // 修复完成状态判断逻辑：只要自评和领导评估都完成了就算完成
     const completedParticipants = participants.filter(p => 
-      p.self_completed === 1 && p.leader_completed === 1 && p.final_score !== null
+      p.self_completed === 1 && p.leader_completed === 1
     );
+    
+    // 为完成的参与者计算 final_score（如果尚未计算）
+    for (const participant of completedParticipants) {
+      if (participant.final_score === null && participant.self_score && participant.leader_score) {
+        participant.final_score = participant.self_score * 0.3 + participant.leader_score * 0.7;
+      }
+    }
+    
     const completedAssessments = completedParticipants.length;
     const completionRate = totalAssessments > 0 ? (completedAssessments / totalAssessments) * 100 : 0;
 
     // 计算分数统计
     const finalScores = completedParticipants
-      .map(p => parseFloat(p.final_score?.toString() || '0'))
+      .map(p => {
+        let score = p.final_score;
+        // 如果 final_score 为空但有自评和领导评分，则实时计算
+        if (!score && p.self_score && p.leader_score) {
+          score = p.self_score * 0.3 + p.leader_score * 0.7;
+        }
+        return parseFloat(score?.toString() || '0');
+      })
       .filter(score => score > 0);
 
     const averageScore = finalScores.length > 0 
@@ -571,6 +588,47 @@ export class UsersService {
         else finalLevel = '待改进';
       }
 
+      // 获取权重配置 - 优先使用考核的模板配置快照，然后是关联的模板配置
+      let weightConfig = { self_weight: 30, leader_weight: 70 }; // 默认权重
+      
+      try {
+        // 优先使用考核的模板配置快照
+        if (assessment.template_config) {
+          const templateConfig = typeof assessment.template_config === 'string' 
+            ? JSON.parse(assessment.template_config) 
+            : assessment.template_config;
+          
+          if (templateConfig.scoring_rules) {
+            const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
+            const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
+            
+            weightConfig = {
+              self_weight: Math.round(selfWeight * 100),
+              leader_weight: Math.round(leaderWeight * 100),
+            };
+          }
+        }
+        // 如果没有模板配置快照，尝试从关联的模板获取
+        else if (assessment.template?.config) {
+          const templateConfig = typeof assessment.template.config === 'string' 
+            ? JSON.parse(assessment.template.config) 
+            : assessment.template.config;
+          
+          if (templateConfig.scoring_rules) {
+            const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
+            const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
+            
+            weightConfig = {
+              self_weight: Math.round(selfWeight * 100),
+              leader_weight: Math.round(leaderWeight * 100),
+            };
+          }
+        }
+      } catch (error) {
+        console.warn(`解析模板配置时出错 (assessment_id: ${assessment.id}):`, error);
+        // 使用默认权重配置
+      }
+
       const item: AssessmentHistoryItemDto = {
         assessment_id: assessment.id,
         assessment_title: assessment.title,
@@ -597,10 +655,7 @@ export class UsersService {
         },
         final_score: participant.final_score ? parseFloat(participant.final_score.toString()) : undefined,
         final_level: finalLevel,
-        weight_config: {
-          self_weight: 30, // 默认权重，可以从模板配置中获取
-          leader_weight: 70,
-        },
+        weight_config: weightConfig,
         is_overdue: isOverdue,
         days_to_deadline: daysDiff,
         template_id: assessment.template?.id || 1,
