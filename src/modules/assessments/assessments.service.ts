@@ -953,4 +953,65 @@ export class AssessmentsService {
       );
     }
   }
+
+  /**
+   * 手动结束考核
+   * 管理员可以主动结束正在进行的考核
+   */
+  async manualEndAssessment(id: number, userId: number): Promise<Assessment> {
+    const assessment = await this.findOne(id);
+    
+    if (!assessment) {
+      throw new NotFoundException("考核不存在");
+    }
+
+    // 检查权限：只有管理员和考核创建者可以结束考核
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['roles'],
+    });
+
+    const isAdmin = user?.roles.some(role => role.name === 'admin');
+    const isCreator = assessment.creator?.id === userId;
+
+    if (!isAdmin && !isCreator) {
+      throw new BadRequestException("没有权限结束此考核");
+    }
+
+    // 验证状态转换
+    this.validateStatusTransition(assessment.status, "completed");
+
+    // 更新考核状态为已完成
+    await this.assessmentsRepository.update(id, {
+      status: "completed",
+      updated_at: new Date(),
+    });
+
+    // 获取参与者统计信息
+    const participants = await this.participantsRepository.find({
+      where: {
+        assessment: { id },
+        deleted_at: null,
+      },
+    });
+
+    const completedCount = participants.filter(p => 
+      p.self_completed === 1 && p.leader_completed === 1
+    ).length;
+
+    console.log(`📋 考核手动结束 - 考核ID: ${id}, 参与者总数: ${participants.length}, 已完成评分: ${completedCount}`);
+
+    return this.findOne(id);
+  }
+
+  /**
+   * 检查考核是否可以进行评分操作
+   */
+  async checkAssessmentStatus(assessmentId: number): Promise<boolean> {
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+    });
+
+    return assessment?.status === "active";
+  }
 }

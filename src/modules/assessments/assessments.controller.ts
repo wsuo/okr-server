@@ -171,11 +171,12 @@ export class AssessmentsController {
   }
 
   @Post(":id/end")
-  @ApiOperation({ summary: "结束考核" })
+  @ApiOperation({ summary: "手动结束考核" })
   @ApiResponse({ status: 200, description: "结束成功" })
   @ApiResponse({ status: 404, description: "考核不存在" })
   @ApiResponse({ status: 400, description: "只能结束进行中的考核" })
-  endAssessment(@Param("id") id: string) {
-    return this.assessmentsService.endAssessment(+id);
+  @ApiResponse({ status: 403, description: "没有权限结束此考核" })
+  endAssessment(@Param("id") id: string, @CurrentUser() user: any) {
+    return this.assessmentsService.manualEndAssessment(+id, user.id);
   }
 }

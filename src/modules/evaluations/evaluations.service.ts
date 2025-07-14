@@ -163,6 +163,9 @@ export class EvaluationsService {
       if (!assessment) {
         throw new BadRequestException("考核不存在");
       }
+      if (assessment.status === "completed" || assessment.status === "ended") {
+        throw new BadRequestException("考核已结束，无法进行评分操作，只能查看评估结果");
+      }
       if (assessment.status !== "active") {
         throw new BadRequestException("只能为进行中的考核提交评估");
       }
@@ -264,6 +267,9 @@ export class EvaluationsService {
       });
       if (!assessment) {
         throw new BadRequestException("考核不存在");
+      }
+      if (assessment.status === "completed" || assessment.status === "ended") {
+        throw new BadRequestException("考核已结束，无法进行评分操作，只能查看评估结果");
       }
       if (assessment.status !== "active") {
         throw new BadRequestException("只能为进行中的考核提交评估");
@@ -612,6 +618,9 @@ export class EvaluationsService {
       if (!assessment) {
         throw new BadRequestException("考核不存在");
       }
+      if (assessment.status === "completed" || assessment.status === "ended") {
+        throw new BadRequestException("考核已结束，无法进行评分操作，只能查看评估结果");
+      }
       if (assessment.status !== "active") {
         throw new BadRequestException("只能为进行中的考核提交评估");
       }
@@ -676,6 +685,9 @@ export class EvaluationsService {
         self_submitted_at: new Date(),
       });
 
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
+
       await queryRunner.commitTransaction();
       return this.findOne(savedEvaluation.id);
     } catch (error) {
@@ -714,6 +726,9 @@ export class EvaluationsService {
       });
       if (!assessment) {
         throw new BadRequestException("考核不存在");
+      }
+      if (assessment.status === "completed" || assessment.status === "ended") {
+        throw new BadRequestException("考核已结束，无法进行评分操作，只能查看评估结果");
       }
       if (assessment.status !== "active") {
         throw new BadRequestException("只能为进行中的考核提交评估");
@@ -787,6 +802,9 @@ export class EvaluationsService {
         leader_score: totalScore,
         leader_submitted_at: new Date(),
       });
+
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
       await queryRunner.commitTransaction();
       return this.findOne(savedEvaluation.id);
@@ -1912,6 +1930,7 @@ export class EvaluationsService {
     });
 
     if (!participant) {
+      console.log(`⚠️ 未找到参与者记录 - 参与者ID: ${participantId}`);
       return;
     }
 
@@ -1933,9 +1952,12 @@ export class EvaluationsService {
           final_score: roundedFinalScore,
         });
 
-        console.log(`自动计算最终分数 - 参与者ID: ${participantId}, 自评: ${participant.self_score}, 领导评分: ${participant.leader_score}, 最终分数: ${roundedFinalScore}`);
+        console.log(`✅ 自动计算最终分数完成 - 参与者ID: ${participantId}, 自评: ${participant.self_score}, 领导评分: ${participant.leader_score}, 最终分数: ${roundedFinalScore}`);
+        
+        // 检查是否所有参与者都已完成评分，如果是则自动结束考核
+        await this.checkAndAutoEndAssessment(queryRunner, participant.assessment.id);
       } catch (error) {
-        console.error(`计算最终分数失败 - 参与者ID: ${participantId}`, error);
+        console.error(`❌ 计算最终分数失败 - 参与者ID: ${participantId}`, error);
         // 不抛出错误，避免影响主流程
       }
     }
@@ -1990,5 +2012,51 @@ export class EvaluationsService {
       self_weight: 0.3,  // 30%
       leader_weight: 0.7, // 70%
     };
+  }
+
+  /**
+   * 检查是否所有参与者都已完成评分，如果是则自动结束考核
+   */
+  private async checkAndAutoEndAssessment(queryRunner: any, assessmentId: number): Promise<void> {
+    try {
+      // 获取考核信息
+      const assessment = await queryRunner.manager.findOne(Assessment, {
+        where: { id: assessmentId },
+      });
+
+      if (!assessment || assessment.status !== 'active') {
+        return; // 只有处于活跃状态的考核才会自动结束
+      }
+
+      // 获取该考核的所有参与者
+      const participants = await queryRunner.manager.find(AssessmentParticipant, {
+        where: {
+          assessment: { id: assessmentId },
+          deleted_at: null,
+        },
+      });
+
+      if (participants.length === 0) {
+        return; // 没有参与者则不需要结束
+      }
+
+      // 检查是否所有参与者都已完成评分
+      const allCompleted = participants.every(participant => 
+        participant.self_completed === 1 && participant.leader_completed === 1
+      );
+
+      if (allCompleted) {
+        // 自动结束考核
+        await queryRunner.manager.update(Assessment, assessmentId, {
+          status: 'completed',
+          updated_at: new Date(),
+        });
+
+        console.log(`🎉 考核自动结束 - 考核ID: ${assessmentId}, 所有 ${participants.length} 名参与者均已完成评分`);
+      }
+    } catch (error) {
+      console.error(`❌ 检查考核完成状态失败 - 考核ID: ${assessmentId}`, error);
+      // 不抛出错误，避免影响主流程
+    }
   }
 }
