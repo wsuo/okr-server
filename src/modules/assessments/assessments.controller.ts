@@ -88,6 +88,14 @@ export class AssessmentsController {
     await this.assessmentsService.remove(+id, user.id);
   }
 
+  @Get(":id/status")
+  @ApiOperation({ summary: "获取考核状态信息" })
+  @ApiResponse({ status: 200, description: "获取成功" })
+  @ApiResponse({ status: 404, description: "考核不存在" })
+  async getAssessmentStatus(@Param("id") id: string, @CurrentUser() user: any) {
+    return this.assessmentsService.getAssessmentStatus(+id, user.id);
+  }
+
   @Get(":id/end-validation")
   @ApiOperation({ summary: "考核结束前的校验" })
   @ApiResponse({

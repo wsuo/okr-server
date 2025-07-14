@@ -336,6 +336,67 @@ export class AssessmentsService {
     }
   }
 
+  async getAssessmentStatus(id: number, currentUserId?: number) {
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id, deleted_at: null },
+      relations: ["creator", "template", "participants", "participants.user"],
+    });
+
+    if (!assessment) {
+      throw new NotFoundException("考核不存在");
+    }
+
+    // 获取参与者统计信息
+    const participants = assessment.participants.filter(p => !p.deleted_at);
+    const totalParticipants = participants.length;
+    const completedParticipants = participants.filter(p => 
+      p.self_completed === 1 && p.leader_completed === 1
+    ).length;
+    const selfCompletedCount = participants.filter(p => p.self_completed === 1).length;
+    const leaderCompletedCount = participants.filter(p => p.leader_completed === 1).length;
+
+    // 检查权限
+    const canEdit = currentUserId
+      ? assessment.creator.id === currentUserId && assessment.status === "draft"
+      : false;
+    const canDelete = currentUserId
+      ? assessment.creator.id === currentUserId && assessment.status === "draft"
+      : false;
+    const canPublish = currentUserId
+      ? assessment.creator.id === currentUserId && assessment.status === "draft"
+      : false;
+    const canEnd = currentUserId
+      ? assessment.creator.id === currentUserId && assessment.status === "active"
+      : false;
+
+    return {
+      id: assessment.id,
+      title: assessment.title,
+      status: assessment.status,
+      progress: {
+        total: totalParticipants,
+        completed: completedParticipants,
+        self_completed: selfCompletedCount,
+        leader_completed: leaderCompletedCount,
+        completion_rate: totalParticipants > 0 ? 
+          Math.round((completedParticipants / totalParticipants) * 100) : 0,
+      },
+      permissions: {
+        canEdit,
+        canDelete,
+        canPublish,
+        canEnd,
+      },
+      dates: {
+        start_date: assessment.start_date,
+        end_date: assessment.end_date,
+        deadline: assessment.deadline,
+        created_at: assessment.created_at,
+        updated_at: assessment.updated_at,
+      },
+    };
+  }
+
   async update(
     id: number,
     updateAssessmentDto: UpdateAssessmentDto
