@@ -8,6 +8,7 @@ import { Repository, Like, DataSource, In } from "typeorm";
 import { Assessment } from "../../entities/assessment.entity";
 import { AssessmentParticipant } from "../../entities/assessment-participant.entity";
 import { User } from "../../entities/user.entity";
+import { Template } from "../../entities/template.entity";
 import { Okr } from "../../entities/okr.entity";
 import { Evaluation } from "../../entities/evaluation.entity";
 import { CreateAssessmentDto } from "./dto/create-assessment.dto";
@@ -25,6 +26,8 @@ export class AssessmentsService {
     private participantsRepository: Repository<AssessmentParticipant>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Template)
+    private templatesRepository: Repository<Template>,
     @InjectRepository(Okr)
     private okrsRepository: Repository<Okr>,
     @InjectRepository(Evaluation)
@@ -279,10 +282,27 @@ export class AssessmentsService {
         );
       }
 
+      // 验证模板是否存在（如果提供了template_id）
+      let template = null;
+      if (createAssessmentDto.template_id) {
+        template = await this.templatesRepository.findOne({
+          where: { id: createAssessmentDto.template_id, deleted_at: null },
+        });
+        if (!template) {
+          throw new BadRequestException("指定的模板不存在");
+        }
+      }
+
       // 创建考核
       const assessment = this.assessmentsRepository.create({
-        ...createAssessmentDto,
+        title: createAssessmentDto.title,
+        period: createAssessmentDto.period,
+        description: createAssessmentDto.description,
+        start_date: createAssessmentDto.start_date,
+        end_date: createAssessmentDto.end_date,
+        deadline: createAssessmentDto.deadline,
         creator: { id: createdBy } as User,
+        template: template, // 建立模板关联
         status: "draft",
       });
 
@@ -519,7 +539,7 @@ export class AssessmentsService {
     } else {
       // 只更新基本信息，不涉及参与者
       // 从editData中移除不属于实体的字段
-      const { participant_ids, ...updateData } = editData;
+      const { participant_ids: _, ...updateData } = editData;
       await this.assessmentsRepository.update(id, updateData);
     }
 
