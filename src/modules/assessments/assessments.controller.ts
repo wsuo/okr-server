@@ -30,6 +30,7 @@ import {
   DeleteValidationResponseDto,
   ScorePreviewResponseDto,
 } from "./dto/validation-response.dto";
+import { AssessmentStatusCheckResult } from "./dto/assessment-status.dto";
 
 @ApiTags("考核管理")
 @ApiBearerAuth()
@@ -90,10 +91,17 @@ export class AssessmentsController {
 
   @Get(":id/status")
   @ApiOperation({ summary: "获取考核状态信息" })
-  @ApiResponse({ status: 200, description: "获取成功" })
+  @ApiResponse({ 
+    status: 200, 
+    description: "获取成功",
+    type: AssessmentStatusCheckResult
+  })
   @ApiResponse({ status: 404, description: "考核不存在" })
-  async getAssessmentStatus(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.assessmentsService.getAssessmentStatus(+id, user.id);
+  async getAssessmentStatus(
+    @Param("id") id: string, 
+    @CurrentUser() _user: any
+  ): Promise<AssessmentStatusCheckResult> {
+    return this.assessmentsService.getAssessmentStatus(+id);
   }
 
   @Get(":id/end-validation")

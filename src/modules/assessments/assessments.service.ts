@@ -336,64 +336,74 @@ export class AssessmentsService {
     }
   }
 
-  async getAssessmentStatus(id: number, currentUserId?: number) {
+  async getAssessmentStatus(id: number) {
     const assessment = await this.assessmentsRepository.findOne({
       where: { id, deleted_at: null },
-      relations: ["creator", "template", "participants", "participants.user"],
+      relations: ["participants"],
     });
 
     if (!assessment) {
       throw new NotFoundException("考核不存在");
     }
 
-    // 获取参与者统计信息
-    const participants = assessment.participants.filter(p => !p.deleted_at);
-    const totalParticipants = participants.length;
-    const completedParticipants = participants.filter(p => 
-      p.self_completed === 1 && p.leader_completed === 1
-    ).length;
-    const selfCompletedCount = participants.filter(p => p.self_completed === 1).length;
-    const leaderCompletedCount = participants.filter(p => p.leader_completed === 1).length;
+    // 获取参与者信息（过滤软删除）
+    const participants = await this.participantsRepository.find({
+      where: { 
+        assessment: { id },
+        deleted_at: null 
+      },
+    });
 
-    // 检查权限
-    const canEdit = currentUserId
-      ? assessment.creator.id === currentUserId && assessment.status === "draft"
-      : false;
-    const canDelete = currentUserId
-      ? assessment.creator.id === currentUserId && assessment.status === "draft"
-      : false;
-    const canPublish = currentUserId
-      ? assessment.creator.id === currentUserId && assessment.status === "draft"
-      : false;
-    const canEnd = currentUserId
-      ? assessment.creator.id === currentUserId && assessment.status === "active"
-      : false;
+    // 检查是否所有参与者都已完成评分
+    const allCompleted = participants.length > 0 && participants.every(p => 
+      p.self_completed === 1 && p.leader_completed === 1
+    );
+
+    // 如果所有参与者都完成了评分且考核状态仍为active，自动结束考核
+    if (allCompleted && assessment.status === 'active') {
+      await this.assessmentsRepository.update(id, {
+        status: 'completed',
+        updated_at: new Date(),
+      });
+      
+      console.log(`🎉 考核自动结束 - 考核ID: ${id}, 所有 ${participants.length} 名参与者均已完成评分`);
+      
+      // 更新本地对象状态以返回正确的状态
+      assessment.status = 'completed';
+    }
+
+    // 判断是否可以进行评分操作
+    const canEvaluate = assessment.status === 'active';
+    const isEnded = assessment.status === 'completed' || assessment.status === 'ended';
+
+    // 生成状态描述信息
+    let message = '';
+    switch (assessment.status) {
+      case 'draft':
+        message = '考核尚未发布';
+        break;
+      case 'active':
+        message = '考核正在进行中';
+        break;
+      case 'completed':
+        if (allCompleted) {
+          message = '考核已结束，所有参与者已完成评分';
+        } else {
+          message = '考核已手动结束';
+        }
+        break;
+      case 'ended':
+        message = '考核已结束';
+        break;
+      default:
+        message = `考核状态：${assessment.status}`;
+    }
 
     return {
-      id: assessment.id,
-      title: assessment.title,
+      canEvaluate,
       status: assessment.status,
-      progress: {
-        total: totalParticipants,
-        completed: completedParticipants,
-        self_completed: selfCompletedCount,
-        leader_completed: leaderCompletedCount,
-        completion_rate: totalParticipants > 0 ? 
-          Math.round((completedParticipants / totalParticipants) * 100) : 0,
-      },
-      permissions: {
-        canEdit,
-        canDelete,
-        canPublish,
-        canEnd,
-      },
-      dates: {
-        start_date: assessment.start_date,
-        end_date: assessment.end_date,
-        deadline: assessment.deadline,
-        created_at: assessment.created_at,
-        updated_at: assessment.updated_at,
-      },
+      isEnded,
+      message,
     };
   }
 
@@ -599,8 +609,9 @@ export class AssessmentsService {
       }
     } else {
       // 只更新基本信息，不涉及参与者
-      // 从editData中移除不属于实体的字段
-      const { participant_ids: _, ...updateData } = editData;
+      // 从editData中移除不属于实体的字段，避免TypeORM处理不认识的字段
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { participant_ids, ...updateData } = editData;
       await this.assessmentsRepository.update(id, updateData);
     }
 
