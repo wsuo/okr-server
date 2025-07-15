@@ -1385,11 +1385,11 @@ export class EvaluationsService {
         department: participant.user.department?.name || '',
       },
       final_score: participant.final_score,
-      final_level: participant.final_level,
+      final_level: this.calculateFinalLevel(participant.final_score),
       self_evaluation: {
         score: selfEvaluation.score,
         submitted_at: selfEvaluation.submitted_at,
-        review: selfEvaluation.self_review,
+        review: selfEvaluation.feedback,
         strengths: selfEvaluation.strengths,
         improvements: selfEvaluation.improvements,
         detailed_scores: selfEvaluation.detailed_scores
@@ -1403,7 +1403,7 @@ export class EvaluationsService {
         score: leaderEvaluation.score,
         submitted_at: leaderEvaluation.submitted_at,
         leader_name: leaderEvaluation.evaluator?.name || '',
-        review: leaderEvaluation.leader_review,
+        review: leaderEvaluation.feedback,
         strengths: leaderEvaluation.strengths,
         improvements: leaderEvaluation.improvements,
         detailed_scores: leaderEvaluation.detailed_scores
@@ -1435,6 +1435,14 @@ export class EvaluationsService {
     if (difference <= 5) return 'high';
     if (difference <= 10) return 'medium';
     return 'low';
+  }
+
+  private calculateFinalLevel(score: number): string {
+    if (score >= 90) return '优秀';
+    if (score >= 80) return '良好';
+    if (score >= 70) return '合格';
+    if (score >= 60) return '基本合格';
+    return '不合格';
   }
 
   async getEvaluationComparison(
