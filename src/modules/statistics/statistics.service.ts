@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, InternalServerErrorException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
 import { User } from "../../entities/user.entity";
@@ -11,6 +11,8 @@ import { StatisticsQueryDto } from "./dto/statistics-query.dto";
 
 @Injectable()
 export class StatisticsService {
+  private readonly logger = new Logger(StatisticsService.name);
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
@@ -28,25 +30,34 @@ export class StatisticsService {
   ) {}
 
   async getDashboard() {
-    const [
-      totalUsers,
-      activeAssessments,
-      completedAssessments,
-      totalEvaluations,
-      averageScores,
-      departmentStats,
-      recentAssessments,
-      scoreDistribution,
-    ] = await Promise.all([
-      this.usersRepository.count(),
-      this.assessmentsRepository.count({ where: { status: "active" } }),
-      this.assessmentsRepository.count({ where: { status: "ended" } }),
-      this.evaluationsRepository.count({ where: { status: "submitted" } }),
-      this.getAverageScores(),
-      this.getDepartmentStatistics(),
-      this.getRecentAssessments(),
-      this.getScoreDistribution(),
-    ]);
+    try {
+      this.logger.log('Fetching dashboard statistics');
+
+      const [
+        totalUsers,
+        activeAssessments,
+        completedAssessments,
+        totalEvaluations,
+        averageScores,
+        departmentStats,
+        recentAssessments,
+        scoreDistribution,
+      ] = await Promise.all([
+        this.usersRepository.count(),
+        this.assessmentsRepository.count({ where: { status: "active" } }),
+        this.assessmentsRepository.count({ where: { status: "ended" } }),
+        this.evaluationsRepository.count({ where: { status: "submitted" } }),
+        this.getAverageScores(),
+        this.getDepartmentStatistics(),
+        this.getRecentAssessments(),
+        this.getScoreDistribution(),
+      ]);
+
+      this.logger.debug(`Dashboard statistics fetched successfully: ${totalUsers} users, ${activeAssessments} active assessments`);
+    } catch (error) {
+      this.logger.error(`Failed to fetch dashboard statistics: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to fetch dashboard statistics');
+    }
 
     const totalAssessments = activeAssessments + completedAssessments;
     const completionRate =
@@ -72,42 +83,51 @@ export class StatisticsService {
   }
 
   async getAssessmentStatistics(query: StatisticsQueryDto) {
-    const { start_date, end_date, department_id } = query;
+    try {
+      this.logger.log(`Fetching assessment statistics with query: ${JSON.stringify(query)}`);
 
-    const queryBuilder = this.assessmentsRepository
-      .createQueryBuilder("assessment")
-      .leftJoin("assessment.participants", "participant")
-      .leftJoin("participant.user", "user")
-      .leftJoin("user.department", "department")
-      .select([
-        "assessment.id",
-        "assessment.title",
-        "assessment.status",
-        "assessment.start_date",
-        "assessment.end_date",
-        "COUNT(participant.id) as participant_count",
-        "SUM(CASE WHEN participant.self_completed = 1 THEN 1 ELSE 0 END) as self_completed",
-        "SUM(CASE WHEN participant.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
-        "AVG(participant.self_score) as avg_self_score",
-        "AVG(participant.leader_score) as avg_leader_score",
-      ])
-      .groupBy("assessment.id");
+      const { start_date, end_date, department_id } = query;
 
-    if (start_date) {
-      queryBuilder.andWhere("assessment.start_date >= :start_date", {
-        start_date,
-      });
-    }
-    if (end_date) {
-      queryBuilder.andWhere("assessment.end_date <= :end_date", { end_date });
-    }
-    if (department_id) {
-      queryBuilder.andWhere("department.id = :department_id", {
-        department_id,
-      });
-    }
+      const queryBuilder = this.assessmentsRepository
+        .createQueryBuilder("assessment")
+        .leftJoin("assessment.participants", "participant")
+        .leftJoin("participant.user", "user")
+        .leftJoin("user.department", "department")
+        .select([
+          "assessment.id",
+          "assessment.title",
+          "assessment.status",
+          "assessment.start_date",
+          "assessment.end_date",
+          "COUNT(participant.id) as participant_count",
+          "SUM(CASE WHEN participant.self_completed = 1 THEN 1 ELSE 0 END) as self_completed",
+          "SUM(CASE WHEN participant.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
+          "AVG(participant.self_score) as avg_self_score",
+          "AVG(participant.leader_score) as avg_leader_score",
+        ])
+        .groupBy("assessment.id");
 
-    return queryBuilder.getRawMany();
+      if (start_date) {
+        queryBuilder.andWhere("assessment.start_date >= :start_date", {
+          start_date,
+        });
+      }
+      if (end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", { end_date });
+      }
+      if (department_id) {
+        queryBuilder.andWhere("department.id = :department_id", {
+          department_id,
+        });
+      }
+
+      const result = await queryBuilder.getRawMany();
+      this.logger.debug(`Assessment statistics fetched: ${result.length} records`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to fetch assessment statistics: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to fetch assessment statistics');
+    }
   }
 
   async getUserStatistics(query: StatisticsQueryDto) {
