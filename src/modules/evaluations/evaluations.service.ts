@@ -1309,6 +1309,134 @@ export class EvaluationsService {
     };
   }
 
+  async getEmployeeEvaluationResult(
+    assessmentId: number,
+    userId: number
+  ): Promise<any> {
+    // 获取考核信息
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: ['template'],
+    });
+
+    if (!assessment) {
+      throw new NotFoundException('考核不存在');
+    }
+
+    // 获取考核参与记录
+    const participant = await this.participantsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        user: { id: userId },
+      },
+      relations: ['assessment', 'user', 'user.department'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('您未参与此考核');
+    }
+
+    // 检查考核是否已完成（自评和领导评分都已完成）
+    if (participant.self_completed !== 1 || participant.leader_completed !== 1) {
+      throw new BadRequestException('考核尚未完成，无法查看结果详情');
+    }
+
+    // 获取自评记录
+    const selfEvaluation = await this.evaluationsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        evaluatee: { id: userId },
+        type: 'self',
+      },
+    });
+
+    // 获取领导评分记录
+    const leaderEvaluation = await this.evaluationsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        evaluatee: { id: userId },
+        type: 'leader',
+      },
+      relations: ['evaluator'],
+    });
+
+    if (!selfEvaluation || !leaderEvaluation) {
+      throw new BadRequestException('评估记录不完整');
+    }
+
+    // 获取模板信息用于详细评分解析
+    const template = await this.getEvaluationTemplate(assessmentId);
+
+    // 构建返回数据
+    const result = {
+      assessment_info: {
+        assessment_id: assessment.id,
+        assessment_title: assessment.title,
+        assessment_period: assessment.period,
+        template_name: assessment.template?.name || '标准绩效考核模板',
+        start_date: assessment.start_date,
+        end_date: assessment.end_date,
+        deadline: assessment.end_date,
+        status: assessment.status,
+      },
+      employee_info: {
+        employee_id: participant.user.id,
+        employee_name: participant.user.name,
+        department: participant.user.department?.name || '',
+      },
+      final_score: participant.final_score,
+      final_level: participant.final_level,
+      self_evaluation: {
+        score: selfEvaluation.score,
+        submitted_at: selfEvaluation.submitted_at,
+        review: selfEvaluation.self_review,
+        strengths: selfEvaluation.strengths,
+        improvements: selfEvaluation.improvements,
+        detailed_scores: selfEvaluation.detailed_scores
+          ? await this.enrichDetailedScoresWithTemplate(
+              assessmentId,
+              selfEvaluation.detailed_scores
+            )
+          : null,
+      },
+      leader_evaluation: {
+        score: leaderEvaluation.score,
+        submitted_at: leaderEvaluation.submitted_at,
+        leader_name: leaderEvaluation.evaluator?.name || '',
+        review: leaderEvaluation.leader_review,
+        strengths: leaderEvaluation.strengths,
+        improvements: leaderEvaluation.improvements,
+        detailed_scores: leaderEvaluation.detailed_scores
+          ? await this.enrichDetailedScoresWithTemplate(
+              assessmentId,
+              leaderEvaluation.detailed_scores
+            )
+          : null,
+      },
+      score_difference: {
+        total_difference: Math.abs(selfEvaluation.score - leaderEvaluation.score),
+        self_higher: selfEvaluation.score > leaderEvaluation.score,
+        agreement_level: this.calculateAgreementLevel(
+          Math.abs(selfEvaluation.score - leaderEvaluation.score)
+        ),
+      },
+      comparison_analysis: this.generateComparisonAnalysis(
+        selfEvaluation,
+        leaderEvaluation,
+        template
+      ),
+      completed_at: participant.updated_at,
+    };
+
+    return result;
+  }
+
+  private calculateAgreementLevel(difference: number): string {
+    if (difference <= 5) return 'high';
+    if (difference <= 10) return 'medium';
+    return 'low';
+  }
+
   async getEvaluationComparison(
     assessmentId: number,
     userId: number,
@@ -1316,7 +1444,7 @@ export class EvaluationsService {
   ): Promise<any> {
     // 权限检查：用户可以查看自己的，领导可以查看下属的
     let hasPermission = false;
-    
+
     // 1. 用户查看自己的评分对比
     if (userId === currentUserId) {
       hasPermission = true;
@@ -1326,14 +1454,14 @@ export class EvaluationsService {
         where: { id: userId },
         relations: ["leader"],
       });
-      
+
       if (evaluatee && evaluatee.leader?.id === currentUserId) {
         hasPermission = true;
       }
     }
-    
+
     // TODO: 添加管理员权限检查
-    
+
     if (!hasPermission) {
       throw new BadRequestException("您没有权限查看此评分对比");
     }
@@ -1443,6 +1571,7 @@ export class EvaluationsService {
         status =
           evaluation.status === "submitted" ? "completed" : "in_progress";
       }
+
 
       const now = new Date();
       const deadline = new Date(participant.assessment.deadline);

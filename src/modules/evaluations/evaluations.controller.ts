@@ -306,6 +306,21 @@ export class EvaluationsController {
     );
   }
 
+  @Get("my-result/:assessmentId")
+  @ApiOperation({ summary: "获取员工自己的考核结果详情" })
+  @ApiResponse({ status: 200, description: "获取成功" })
+  @ApiResponse({ status: 400, description: "考核未完成" })
+  @ApiResponse({ status: 404, description: "考核不存在或未参与" })
+  getMyEvaluationResult(
+    @Param("assessmentId") assessmentId: string,
+    @CurrentUser() user: any
+  ) {
+    return this.evaluationsService.getEmployeeEvaluationResult(
+      +assessmentId,
+      user.id
+    );
+  }
+
   @Get("assessment/:assessmentId/user/:userId/complete")
   @ApiOperation({ summary: "获取完整评估详情" })
   @ApiResponse({
