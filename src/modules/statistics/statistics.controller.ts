@@ -82,4 +82,13 @@ export class StatisticsController {
   getPerformanceTrends(@Query() query: StatisticsQueryDto, @CurrentUser() user: any) {
     return this.statisticsService.getPerformanceTrends(query);
   }
+
+  @Get("performance-list")
+  @ApiOperation({ summary: "获取员工绩效列表" })
+  @ApiResponse({ status: 200, description: "获取成功" })
+  @ApiResponse({ status: 403, description: "权限不足" })
+  @Roles("boss", "admin")
+  getPerformanceList(@Query() query: StatisticsQueryDto, @CurrentUser() user: any) {
+    return this.statisticsService.getPerformanceList(query);
+  }
 }

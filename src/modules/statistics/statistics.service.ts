@@ -45,7 +45,7 @@ export class StatisticsService {
       ] = await Promise.all([
         this.usersRepository.count(),
         this.assessmentsRepository.count({ where: { status: "active" } }),
-        this.assessmentsRepository.count({ where: { status: "ended" } }),
+        this.assessmentsRepository.count({ where: { status: "completed" } }),
         this.evaluationsRepository.count({ where: { status: "submitted" } }),
         this.getAverageScores(),
         this.getDepartmentStatistics(),
@@ -138,10 +138,10 @@ export class StatisticsService {
 
       const queryBuilder = this.participantsRepository
         .createQueryBuilder("participant")
-        .leftJoinAndSelect("participant.user", "user")
-        .leftJoinAndSelect("user.department", "department")
-        .leftJoinAndSelect("participant.assessment", "assessment")
-        // 移除错误的关联 .leftJoinAndSelect("participant.okr", "okr")
+        .leftJoin("participant.user", "user")
+        .leftJoin("user.department", "department")
+        .leftJoin("participant.assessment", "assessment")
+        .leftJoin("user.roles", "role")
         .select([
           "user.id",
           "user.username",
@@ -152,8 +152,11 @@ export class StatisticsService {
           "SUM(CASE WHEN participant.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
           "AVG(participant.self_score) as avg_self_score",
           "AVG(participant.leader_score) as avg_leader_score",
-          // 移除错误的字段 "AVG(okr.progress) as avg_okr_progress",
         ])
+        .where("participant.deleted_at IS NULL") // Only include non-deleted participants
+        .andWhere("user.deleted_at IS NULL") // Only include non-deleted users
+        .andWhere("(role.code != 'admin' OR role.code IS NULL)") // Exclude admin users
+        .andWhere("(role.code != 'boss' OR role.code IS NULL)") // Exclude boss users
         .groupBy("user.id");
 
       if (department_id) {
@@ -418,5 +421,154 @@ export class StatisticsService {
     }
 
     return queryBuilder.getRawMany();
+  }
+
+  async getPerformanceList(query: StatisticsQueryDto) {
+    try {
+      this.logger.log(`Fetching performance list with query: ${JSON.stringify(query)}`);
+
+      const { department_id, user_id } = query;
+
+      // Step 1: Get all participants with their assessment data and actual evaluation scores
+      const queryBuilder = this.participantsRepository
+        .createQueryBuilder("participant")
+        .leftJoin("participant.user", "user")
+        .leftJoin("user.department", "department")
+        .leftJoin("participant.assessment", "assessment")
+        .leftJoin("user.roles", "role")
+        // Join with evaluations to get actual scores
+        .leftJoin(
+          "evaluations",
+          "self_eval",
+          "self_eval.assessment_id = assessment.id AND self_eval.evaluatee_id = user.id AND self_eval.type = 'self' AND self_eval.status = 'submitted'"
+        )
+        .leftJoin(
+          "evaluations",
+          "leader_eval",
+          "leader_eval.assessment_id = assessment.id AND leader_eval.evaluatee_id = user.id AND leader_eval.type = 'leader' AND leader_eval.status = 'submitted'"
+        )
+        .select([
+          "participant.id as participant_id",
+          "participant.self_completed",
+          "participant.leader_completed",
+          "participant.final_score as participant_final_score",
+          "participant.self_submitted_at",
+          "participant.leader_submitted_at",
+          "assessment.id as assessment_id",
+          "assessment.title as assessment_title",
+          "assessment.period as assessment_period",
+          "assessment.start_date as assessment_start_date",
+          "assessment.end_date as assessment_end_date",
+          "assessment.status as assessment_status",
+          "user.id as user_id",
+          "user.name as user_name",
+          "user.username as user_username",
+          "user.position as user_position",
+          "department.name as department_name",
+          // Get actual scores from evaluations table
+          "self_eval.score as actual_self_score",
+          "self_eval.submitted_at as self_evaluation_submitted_at",
+          "leader_eval.score as actual_leader_score",
+          "leader_eval.submitted_at as leader_evaluation_submitted_at",
+        ])
+        .where("participant.deleted_at IS NULL")
+        .andWhere("user.deleted_at IS NULL")
+        .andWhere("assessment.deleted_at IS NULL")
+        .andWhere("(role.code != 'admin' OR role.code IS NULL)") // Exclude admin users
+        .andWhere("(role.code != 'boss' OR role.code IS NULL)"); // Exclude boss users
+
+      if (department_id) {
+        queryBuilder.andWhere("department.id = :department_id", {
+          department_id,
+        });
+      }
+      if (user_id) {
+        queryBuilder.andWhere("user.id = :user_id", { user_id });
+      }
+
+      // Order by assessment start date descending to get latest assessments first
+      queryBuilder.orderBy("assessment.start_date", "DESC");
+
+      const allResults = await queryBuilder.getRawMany();
+
+      this.logger.debug(`Found ${allResults.length} total participant records`);
+
+      // Step 2: Group by user and get the latest assessment for each user
+      // Prioritize assessments with actual evaluation data
+      const userLatestAssessments = new Map();
+
+      for (const result of allResults) {
+        const userId = result.user_id;
+        const hasSelfEval = result.actual_self_score !== null;
+        const hasLeaderEval = result.actual_leader_score !== null;
+        const hasAnyEval = hasSelfEval || hasLeaderEval;
+
+        if (!userLatestAssessments.has(userId)) {
+          // First record for this user
+          userLatestAssessments.set(userId, result);
+        } else {
+          const existing = userLatestAssessments.get(userId);
+          const existingHasSelfEval = existing.actual_self_score !== null;
+          const existingHasLeaderEval = existing.actual_leader_score !== null;
+          const existingHasAnyEval = existingHasSelfEval || existingHasLeaderEval;
+
+          // Replace if:
+          // 1. Current record has evaluation data and existing doesn't, OR
+          // 2. Both have evaluation data but current is more recent, OR
+          // 3. Neither has evaluation data but current assessment is more recent
+          if (
+            (hasAnyEval && !existingHasAnyEval) ||
+            (hasAnyEval && existingHasAnyEval &&
+             new Date(result.assessment_start_date) > new Date(existing.assessment_start_date)) ||
+            (!hasAnyEval && !existingHasAnyEval &&
+             new Date(result.assessment_start_date) > new Date(existing.assessment_start_date))
+          ) {
+            userLatestAssessments.set(userId, result);
+          }
+        }
+      }
+
+      // Step 3: Transform the result to a more readable format
+      const transformedResult = Array.from(userLatestAssessments.values()).map(item => {
+        const selfScore = parseFloat(item.actual_self_score) || 0;
+        const leaderScore = parseFloat(item.actual_leader_score) || 0;
+        const finalScore = parseFloat(item.participant_final_score) || 0;
+
+        return {
+          assessment: {
+            id: item.assessment_id,
+            title: item.assessment_title,
+            period: item.assessment_period,
+            start_date: item.assessment_start_date,
+            end_date: item.assessment_end_date,
+            status: item.assessment_status,
+          },
+          employee: {
+            id: item.user_id,
+            name: item.user_name,
+            username: item.user_username,
+            position: item.user_position,
+            department: item.department_name,
+          },
+          scores: {
+            self_score: selfScore,
+            leader_score: leaderScore,
+            final_score: finalScore,
+          },
+          completion: {
+            self_completed: item.actual_self_score !== null,
+            leader_completed: item.actual_leader_score !== null,
+            self_submitted_at: item.self_evaluation_submitted_at || item.self_submitted_at,
+            leader_submitted_at: item.leader_evaluation_submitted_at || item.leader_submitted_at,
+          },
+        };
+      });
+
+      this.logger.debug(`Performance list fetched: ${transformedResult.length} unique employees`);
+      return transformedResult;
+    } catch (error) {
+      this.logger.error(`Failed to fetch performance list: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to fetch performance list');
+    }
   }
 }
