@@ -1115,6 +1115,15 @@ export class EvaluationsService {
     assessmentId: number,
     currentUserId: number
   ): Promise<EvaluationProgressDto> {
+    const currentUser = await this.usersRepository.findOne({
+      where: { id: currentUserId },
+      relations: ["department", "roles"],
+    });
+
+    if (!currentUser) {
+      throw new NotFoundException(`用户 ID ${currentUserId} 不存在`);
+    }
+
     const assessment = await this.assessmentsRepository.findOne({
       where: { id: assessmentId },
       relations: [
@@ -1128,7 +1137,16 @@ export class EvaluationsService {
       throw new NotFoundException(`考核 ID ${assessmentId} 不存在`);
     }
 
-    const participants = assessment.participants.filter((p) => !p.deleted_at);
+    let participants = assessment.participants.filter((p) => !p.deleted_at);
+
+    // 如果当前用户是领导，则只显示其部门的成员
+    const isLeader = currentUser.roles.some((role) => role.name === "leader");
+    if (isLeader && currentUser.department) {
+      participants = participants.filter(
+        (p) => p.user.department?.id === currentUser.department.id
+      );
+    }
+
     const totalParticipants = participants.length;
 
     // 统计完成情况

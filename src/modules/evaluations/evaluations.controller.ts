@@ -251,6 +251,8 @@ export class EvaluationsController {
 
   @Get("progress/:assessmentId")
   @ApiOperation({ summary: "获取考核评分进度" })
+  @Roles("leader", "boss", "admin")
+  @UseGuards(RolesGuard)
   @ApiResponse({
     status: 200,
     description: "获取成功",
