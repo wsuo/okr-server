@@ -251,13 +251,15 @@ export class EvaluationsController {
 
   @Get("progress/:assessmentId")
   @ApiOperation({ summary: "获取考核评分进度" })
-  @Roles("leader", "boss", "admin")
+  @Roles("leader")
   @UseGuards(RolesGuard)
   @ApiResponse({
     status: 200,
     description: "获取成功",
     type: EvaluationProgressDto,
   })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限，仅限领导角色访问" })
   @ApiResponse({ status: 404, description: "考核不存在" })
   getEvaluationProgress(
     @Param("assessmentId") assessmentId: string,

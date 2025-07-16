@@ -1124,6 +1124,17 @@ export class EvaluationsService {
       throw new NotFoundException(`用户 ID ${currentUserId} 不存在`);
     }
 
+    // 验证用户是否具有领导角色
+    const hasLeaderRole = currentUser.roles.some((role) => role.code === "leader");
+    if (!hasLeaderRole) {
+      throw new BadRequestException("您没有权限访问此功能，仅限领导角色");
+    }
+
+    // 验证用户是否属于某个部门
+    if (!currentUser.department) {
+      throw new BadRequestException("您未分配到任何部门，无法查看评估进度");
+    }
+
     const assessment = await this.assessmentsRepository.findOne({
       where: { id: assessmentId },
       relations: [
@@ -1137,17 +1148,21 @@ export class EvaluationsService {
       throw new NotFoundException(`考核 ID ${assessmentId} 不存在`);
     }
 
+    // 过滤掉已删除的参与者
     let participants = assessment.participants.filter((p) => !p.deleted_at);
 
-    // 如果当前用户是领导，则只显示其部门的成员
-    const isLeader = currentUser.roles.some((role) => role.name === "leader");
-    if (isLeader && currentUser.department) {
-      participants = participants.filter(
-        (p) => p.user.department?.id === currentUser.department.id
-      );
-    }
+    // 严格的部门过滤：只显示当前领导所在部门的成员
+    participants = participants.filter((p) => {
+      // 确保参与者有部门信息且与当前用户部门匹配
+      return p.user.department?.id === currentUser.department.id;
+    });
 
     const totalParticipants = participants.length;
+
+    // 如果当前领导部门没有参与者，记录日志但不抛出错误（可能是正常情况）
+    if (totalParticipants === 0) {
+      console.log(`Leader ${currentUserId} from department ${currentUser.department.name} has no participants in assessment ${assessmentId}`);
+    }
 
     // 统计完成情况
     const selfCompletedCount = participants.filter(
