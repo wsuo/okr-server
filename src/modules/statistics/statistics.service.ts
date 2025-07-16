@@ -54,32 +54,32 @@ export class StatisticsService {
       ]);
 
       this.logger.debug(`Dashboard statistics fetched successfully: ${totalUsers} users, ${activeAssessments} active assessments`);
+
+      const totalAssessments = activeAssessments + completedAssessments;
+      const completionRate =
+        totalAssessments > 0
+          ? (completedAssessments / totalAssessments) * 100
+          : 0;
+
+      return {
+        overview: {
+          total_users: totalUsers,
+          active_assessments: activeAssessments,
+          completed_assessments: completedAssessments,
+          total_evaluations: totalEvaluations,
+          completion_rate: Number(completionRate.toFixed(1)),
+          average_score: averageScores.overall,
+          self_average: averageScores.self,
+          leader_average: averageScores.leader,
+        },
+        department_stats: departmentStats,
+        recent_assessments: recentAssessments,
+        score_distribution: scoreDistribution,
+      };
     } catch (error) {
       this.logger.error(`Failed to fetch dashboard statistics: ${error.message}`, error.stack);
       throw new InternalServerErrorException('Failed to fetch dashboard statistics');
     }
-
-    const totalAssessments = activeAssessments + completedAssessments;
-    const completionRate =
-      totalAssessments > 0
-        ? (completedAssessments / totalAssessments) * 100
-        : 0;
-
-    return {
-      overview: {
-        total_users: totalUsers,
-        active_assessments: activeAssessments,
-        completed_assessments: completedAssessments,
-        total_evaluations: totalEvaluations,
-        completion_rate: Number(completionRate.toFixed(1)),
-        average_score: averageScores.overall,
-        self_average: averageScores.self,
-        leader_average: averageScores.leader,
-      },
-      department_stats: departmentStats,
-      recent_assessments: recentAssessments,
-      score_distribution: scoreDistribution,
-    };
   }
 
   async getAssessmentStatistics(query: StatisticsQueryDto) {
@@ -131,43 +131,52 @@ export class StatisticsService {
   }
 
   async getUserStatistics(query: StatisticsQueryDto) {
-    const { department_id, user_id, assessment_id } = query;
+    try {
+      this.logger.log(`Fetching user statistics with query: ${JSON.stringify(query)}`);
 
-    const queryBuilder = this.participantsRepository
-      .createQueryBuilder("participant")
-      .leftJoinAndSelect("participant.user", "user")
-      .leftJoinAndSelect("user.department", "department")
-      .leftJoinAndSelect("participant.assessment", "assessment")
-      .leftJoinAndSelect("participant.okr", "okr")
-      .select([
-        "user.id",
-        "user.username",
-        "user.name",
-        "department.name as department_name",
-        "COUNT(participant.id) as total_assessments",
-        "SUM(CASE WHEN participant.self_completed = 1 THEN 1 ELSE 0 END) as self_completed",
-        "SUM(CASE WHEN participant.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
-        "AVG(participant.self_score) as avg_self_score",
-        "AVG(participant.leader_score) as avg_leader_score",
-        "AVG(okr.progress) as avg_okr_progress",
-      ])
-      .groupBy("user.id");
+      const { department_id, user_id, assessment_id } = query;
 
-    if (department_id) {
-      queryBuilder.andWhere("department.id = :department_id", {
-        department_id,
-      });
-    }
-    if (user_id) {
-      queryBuilder.andWhere("user.id = :user_id", { user_id });
-    }
-    if (assessment_id) {
-      queryBuilder.andWhere("assessment.id = :assessment_id", {
-        assessment_id,
-      });
-    }
+      const queryBuilder = this.participantsRepository
+        .createQueryBuilder("participant")
+        .leftJoinAndSelect("participant.user", "user")
+        .leftJoinAndSelect("user.department", "department")
+        .leftJoinAndSelect("participant.assessment", "assessment")
+        // 移除错误的关联 .leftJoinAndSelect("participant.okr", "okr")
+        .select([
+          "user.id",
+          "user.username",
+          "user.name",
+          "department.name as department_name",
+          "COUNT(participant.id) as total_assessments",
+          "SUM(CASE WHEN participant.self_completed = 1 THEN 1 ELSE 0 END) as self_completed",
+          "SUM(CASE WHEN participant.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
+          "AVG(participant.self_score) as avg_self_score",
+          "AVG(participant.leader_score) as avg_leader_score",
+          // 移除错误的字段 "AVG(okr.progress) as avg_okr_progress",
+        ])
+        .groupBy("user.id");
 
-    return queryBuilder.getRawMany();
+      if (department_id) {
+        queryBuilder.andWhere("department.id = :department_id", {
+          department_id,
+        });
+      }
+      if (user_id) {
+        queryBuilder.andWhere("user.id = :user_id", { user_id });
+      }
+      if (assessment_id) {
+        queryBuilder.andWhere("assessment.id = :assessment_id", {
+          assessment_id,
+        });
+      }
+
+      const result = await queryBuilder.getRawMany();
+      this.logger.debug(`User statistics fetched: ${result.length} records`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to fetch user statistics: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to fetch user statistics');
+    }
   }
 
   async getDepartmentStatistics() {
@@ -212,42 +221,51 @@ export class StatisticsService {
   }
 
   async getOkrStatistics(query: StatisticsQueryDto) {
-    const { department_id, user_id, assessment_id } = query;
+    try {
+      this.logger.log(`Fetching OKR statistics with query: ${JSON.stringify(query)}`);
 
-    const queryBuilder = this.okrsRepository
-      .createQueryBuilder("okr")
-      .leftJoinAndSelect("okr.user", "user")
-      .leftJoinAndSelect("user.department", "department")
-      .leftJoinAndSelect("okr.assessment", "assessment")
-      .leftJoinAndSelect("okr.keyResults", "keyResults")
-      .select([
-        "okr.id",
-        "okr.title",
-        "okr.progress",
-        "okr.rating",
-        "user.name",
-        "department.name as department_name",
-        "assessment.title as assessment_title",
-        "AVG(keyResults.progress) as avg_key_result_progress",
-        "COUNT(keyResults.id) as key_result_count",
-      ])
-      .groupBy("okr.id");
+      const { department_id, user_id, assessment_id } = query;
 
-    if (department_id) {
-      queryBuilder.andWhere("department.id = :department_id", {
-        department_id,
-      });
-    }
-    if (user_id) {
-      queryBuilder.andWhere("user.id = :user_id", { user_id });
-    }
-    if (assessment_id) {
-      queryBuilder.andWhere("assessment.id = :assessment_id", {
-        assessment_id,
-      });
-    }
+      const queryBuilder = this.okrsRepository
+        .createQueryBuilder("okr")
+        .leftJoinAndSelect("okr.user", "user")
+        .leftJoinAndSelect("user.department", "department")
+        .leftJoinAndSelect("okr.assessment", "assessment")
+        .leftJoinAndSelect("okr.keyResults", "keyResults")
+        .select([
+          "okr.id",
+          "okr.objective", // 修改为 objective 而不是 title
+          "okr.progress",
+          "okr.self_rating", // 修改为 self_rating 而不是 rating
+          "user.name",
+          "department.name as department_name",
+          "assessment.title as assessment_title",
+          "AVG(keyResults.progress) as avg_key_result_progress",
+          "COUNT(keyResults.id) as key_result_count",
+        ])
+        .groupBy("okr.id");
 
-    return queryBuilder.getRawMany();
+      if (department_id) {
+        queryBuilder.andWhere("department.id = :department_id", {
+          department_id,
+        });
+      }
+      if (user_id) {
+        queryBuilder.andWhere("user.id = :user_id", { user_id });
+      }
+      if (assessment_id) {
+        queryBuilder.andWhere("assessment.id = :assessment_id", {
+          assessment_id,
+        });
+      }
+
+      const result = await queryBuilder.getRawMany();
+      this.logger.debug(`OKR statistics fetched: ${result.length} records`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to fetch OKR statistics: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to fetch OKR statistics');
+    }
   }
 
   async getEvaluationStatistics(query: StatisticsQueryDto) {
