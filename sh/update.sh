@@ -149,13 +149,21 @@ run_migrations() {
 start_service() {
     log_info "启动OKR服务..."
     
-    # 使用PM2启动服务
-    if [ -f "ecosystem.config.js" ]; then
-        pm2 start ecosystem.config.js --env production
-    else
-        log_warning "未找到ecosystem.config.js，使用默认配置启动"
-        pm2 start dist/src/main.js --name okr-server
+    # 检查并创建PM2配置文件
+    if [ ! -f "ecosystem.config.js" ]; then
+        if [ -f "ecosystem.config.example.js" ]; then
+            log_info "复制示例配置文件..."
+            cp ecosystem.config.example.js ecosystem.config.js
+        else
+            log_warning "未找到配置文件，使用默认配置启动"
+            pm2 start dist/src/main.js --name okr-server
+            pm2 save
+            return
+        fi
     fi
+    
+    # 使用PM2启动服务
+    pm2 start ecosystem.config.js --env production
     
     # 保存PM2配置
     pm2 save

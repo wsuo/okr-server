@@ -59,3 +59,6 @@ uploads/
 # Temporary files
 .tmp/
 temp/
+
+# Process management configuration (environment-specific)
+ecosystem.config.js

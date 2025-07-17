@@ -185,14 +185,24 @@ npm run seed:template
 
 ### 1. 使用 PM2 管理进程
 
-创建 PM2 配置文件 `ecosystem.config.js`：
+复制并创建 PM2 配置文件：
+
+```bash
+# 复制示例配置文件
+cp ecosystem.config.example.js ecosystem.config.js
+
+# 根据服务器环境编辑配置
+nano ecosystem.config.js
+```
+
+配置文件内容参考：
 
 ```javascript
 module.exports = {
   apps: [
     {
       name: 'okr-server',
-      script: './dist/main.js',
+      script: './dist/src/main.js',
       instances: 1,
       exec_mode: 'cluster',
       env: {
@@ -519,7 +529,7 @@ module.exports = {
   apps: [
     {
       name: 'okr-server',
-      script: './dist/main.js',
+      script: './dist/src/main.js',
       instances: 'max', // 使用所有 CPU 核心
       exec_mode: 'cluster',
       max_memory_restart: '1G',

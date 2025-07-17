@@ -7,11 +7,11 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 3010,
       },
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 3010,
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: './logs/err.log',
