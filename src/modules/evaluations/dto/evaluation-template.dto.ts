@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { EvaluationType } from "../../../common/enums/evaluation.enum";
 
 export class EvaluationItemTemplateDto {
   @ApiProperty({ description: "项目ID" })
@@ -80,6 +81,10 @@ export class EvaluationTemplateResponseDto {
       enabled: boolean;
       weight_in_final: number;
     };
+    boss_evaluation: {
+      enabled: boolean;
+      weight_in_final: number;
+    };
     calculation_method: string;
   };
 
@@ -97,8 +102,8 @@ export class UserEvaluationTemplateDto extends EvaluationTemplateResponseDto {
   @ApiProperty({ description: "当前用户ID" })
   current_user_id: number;
 
-  @ApiProperty({ description: "用户类型", enum: ["self", "leader"] })
-  evaluation_type: "self" | "leader";
+  @ApiProperty({ description: "用户类型", enum: ["self", "leader", "boss"] })
+  evaluation_type: EvaluationType;
 
   @ApiProperty({ description: "被评估人ID（领导评分时有值）", required: false })
   evaluatee_id?: number;

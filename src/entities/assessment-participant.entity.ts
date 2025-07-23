@@ -23,11 +23,17 @@ export class AssessmentParticipant {
   @Column({ type: "tinyint", default: 0 })
   leader_completed: number;
 
+  @Column({ type: "tinyint", default: 0 })
+  boss_completed: number;
+
   @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
   self_score: number;
 
   @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
   leader_score: number;
+
+  @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
+  boss_score: number;
 
   @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
   final_score: number;
@@ -45,6 +51,13 @@ export class AssessmentParticipant {
     transformer: timezoneTransformer
   })
   leader_submitted_at: Date;
+
+  @Column({ 
+    type: "timestamp", 
+    nullable: true,
+    transformer: timezoneTransformer
+  })
+  boss_submitted_at: Date;
 
   @CreateDateColumn({
     transformer: timezoneTransformer

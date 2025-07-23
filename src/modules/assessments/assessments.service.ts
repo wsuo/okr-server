@@ -11,6 +11,7 @@ import { User } from "../../entities/user.entity";
 import { Template } from "../../entities/template.entity";
 import { Okr } from "../../entities/okr.entity";
 import { Evaluation } from "../../entities/evaluation.entity";
+import { EvaluationType, EvaluationStatus } from "../../common/enums/evaluation.enum";
 import { CreateAssessmentDto } from "./dto/create-assessment.dto";
 import { UpdateAssessmentDto } from "./dto/update-assessment.dto";
 import { EditAssessmentDto } from "./dto/edit-assessment.dto";
@@ -793,7 +794,7 @@ export class AssessmentsService {
         where: {
           assessment: { id: assessmentId },
           evaluatee: { id: participant.user.id },
-          status: "submitted",
+          status: EvaluationStatus.SUBMITTED,
         },
       });
 
@@ -843,7 +844,7 @@ export class AssessmentsService {
           where: {
             assessment: { id: assessmentId },
             evaluatee: { id: okr.user.id },
-            status: "submitted",
+            status: EvaluationStatus.SUBMITTED,
           },
         });
 
@@ -921,7 +922,7 @@ export class AssessmentsService {
         this.evaluationsRepository.count({
           where: {
             assessment: { id: assessmentId },
-            status: "submitted",
+            status: EvaluationStatus.SUBMITTED,
           },
         }),
       ]);

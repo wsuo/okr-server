@@ -7,6 +7,7 @@ import {
   Max,
 } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
+import { EvaluationStatus } from "../../../common/enums/evaluation.enum";
 
 export class UpdateEvaluationDto {
   @ApiProperty({ description: "评分", required: false })
@@ -39,5 +40,5 @@ export class UpdateEvaluationDto {
   @IsString()
   @IsOptional()
   @IsIn(["draft", "submitted"])
-  status?: string;
+  status?: EvaluationStatus;
 }

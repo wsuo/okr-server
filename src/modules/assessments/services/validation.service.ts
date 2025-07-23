@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { Assessment } from "../../../entities/assessment.entity";
 import { AssessmentParticipant } from "../../../entities/assessment-participant.entity";
 import { Evaluation } from "../../../entities/evaluation.entity";
+import { EvaluationType, EvaluationStatus } from "../../../common/enums/evaluation.enum";
 import { Okr } from "../../../entities/okr.entity";
 import { Template } from "../../../entities/template.entity";
 import { User } from "../../../entities/user.entity";
@@ -193,7 +194,7 @@ export class ValidationService {
       return {
         participants: [],
         templateConfig: {
-          evaluatorWeights: { self: 0.3, leader: 0.7 },
+          evaluatorWeights: { self: 0.4, leader: 0.6 },
           categoryWeights: [],
         },
       };
@@ -253,7 +254,7 @@ export class ValidationService {
             categoryWeights: currentTemplateConfig?.categories || [],
           }
         : {
-            evaluatorWeights: { self: 0.3, leader: 0.7 },
+            evaluatorWeights: { self: 0.4, leader: 0.6 },
             categoryWeights: [],
           };
 
@@ -359,7 +360,7 @@ export class ValidationService {
         this.evaluationsRepository.count({
           where: {
             assessment: { id: assessmentId },
-            status: "submitted",
+            status: EvaluationStatus.SUBMITTED,
           },
         }),
       ]);

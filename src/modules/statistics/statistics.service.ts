@@ -7,6 +7,7 @@ import { AssessmentParticipant } from "../../entities/assessment-participant.ent
 import { Evaluation } from "../../entities/evaluation.entity";
 import { Okr } from "../../entities/okr.entity";
 import { Department } from "../../entities/department.entity";
+import { EvaluationStatus } from "../../common/enums/evaluation.enum";
 import { StatisticsQueryDto } from "./dto/statistics-query.dto";
 
 @Injectable()
@@ -46,7 +47,7 @@ export class StatisticsService {
         this.usersRepository.count(),
         this.assessmentsRepository.count({ where: { status: "active" } }),
         this.assessmentsRepository.count({ where: { status: "completed" } }),
-        this.evaluationsRepository.count({ where: { status: "submitted" } }),
+        this.evaluationsRepository.count({ where: { status: EvaluationStatus.SUBMITTED } }),
         this.getAverageScores(),
         this.getDepartmentStatistics(),
         this.getRecentAssessments(),

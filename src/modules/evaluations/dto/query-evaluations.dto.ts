@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsIn, IsNumber, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
+import { EvaluationType, EvaluationStatus } from "../../../common/enums/evaluation.enum";
 
 export class QueryEvaluationsDto {
   @ApiProperty({ description: "页码", example: 1, required: false })
@@ -37,13 +38,13 @@ export class QueryEvaluationsDto {
 
   @ApiProperty({
     description: "评估类型",
-    enum: ["self", "leader", "peer"],
+    enum: ["self", "leader", "boss"],
     required: false,
   })
   @IsString()
   @IsOptional()
-  @IsIn(["self", "leader", "peer"])
-  type?: string;
+  @IsIn(["self", "leader", "boss"])
+  type?: EvaluationType;
 
   @ApiProperty({
     description: "评估状态",
@@ -53,5 +54,5 @@ export class QueryEvaluationsDto {
   @IsString()
   @IsOptional()
   @IsIn(["draft", "submitted"])
-  status?: string;
+  status?: EvaluationStatus;
 }

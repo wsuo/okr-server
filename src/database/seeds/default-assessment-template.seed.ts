@@ -259,12 +259,18 @@ export class DefaultAssessmentTemplateSeed {
         self_evaluation: {
           enabled: true,
           description: "员工自我评估",
-          weight_in_final: 0.3, // 自评在最终分数中占30%
+          weight_in_final: 0.36, // 自评在最终分数中占36% (原40% × 90%)
         },
         leader_evaluation: {
           enabled: true,
           description: "直属领导评估",
-          weight_in_final: 0.7, // 领导评价在最终分数中占70%
+          weight_in_final: 0.54, // 领导评价在最终分数中占54% (原60% × 90%)
+        },
+        boss_evaluation: {
+          enabled: true,
+          description: "上级(Boss)评估",
+          weight_in_final: 0.10, // 上级评价在最终分数中占10%
+          is_optional: true, // 上级评分为可选项，不阻塞整体流程
         },
         calculation_method: "weighted_average", // 加权平均
       },
@@ -282,6 +288,12 @@ export class DefaultAssessmentTemplateSeed {
           "2. 提供具体的反馈和改进建议",
           "3. 确保评分的公平性和客观性",
           '4. 对"领导评价"部分进行专项评估',
+        ],
+        for_bosses: [
+          "1. 基于整体工作表现和战略贡献进行评分",
+          "2. 关注跨部门协作和创新能力",
+          "3. 提供高层视角的发展建议",
+          "4. 上级评分为可选项，可根据实际情况决定是否参与",
         ],
       },
     };
@@ -308,5 +320,9 @@ export class DefaultAssessmentTemplateSeed {
       "- 日常管理 (30%): 工作态度、审批流程、出勤、汇报、团队活动、环境维护、制度遵守"
     );
     console.log("- 领导评价 (10%): 专项任务完成及反馈 (仅限领导评分)");
+    console.log("评分权重配置:");
+    console.log("- 员工自评: 36% (40% × 90%)");
+    console.log("- 领导评分: 54% (60% × 90%)");
+    console.log("- 上级评分: 10% (可选项)");
   }
 }

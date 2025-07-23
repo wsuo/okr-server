@@ -24,11 +24,13 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CreateSelfEvaluationDto } from "./dto/create-self-evaluation.dto";
 import { CreateLeaderEvaluationDto } from "./dto/create-leader-evaluation.dto";
+import { CreateBossEvaluationDto } from "./dto/create-boss-evaluation.dto";
 import { UpdateEvaluationDto } from "./dto/update-evaluation.dto";
 import { QueryEvaluationsDto } from "./dto/query-evaluations.dto";
 import {
   CreateDetailedSelfEvaluationDto,
   CreateDetailedLeaderEvaluationDto,
+  CreateDetailedBossEvaluationDto,
   SaveEvaluationDraftDto,
   UpdateEvaluationDraftDto,
 } from "./dto/detailed-score.dto";
@@ -217,6 +219,37 @@ export class EvaluationsController {
   ) {
     return this.evaluationsService.createDetailedLeaderEvaluation(
       createDetailedLeaderEvaluationDto,
+      user.id
+    );
+  }
+
+  @Post("boss")
+  @ApiOperation({ summary: "提交上级(Boss)评分" })
+  @ApiResponse({ status: 201, description: "提交成功" })
+  @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
+  @ApiResponse({ status: 403, description: "权限不足，您不是该员工的上级" })
+  createBossEvaluation(
+    @Body() createBossEvaluationDto: CreateBossEvaluationDto,
+    @CurrentUser() user: any
+  ) {
+    return this.evaluationsService.createBossEvaluation(
+      createBossEvaluationDto,
+      user.id
+    );
+  }
+
+  @Post("detailed-boss")
+  @ApiOperation({ summary: "提交详细上级(Boss)评分" })
+  @ApiResponse({ status: 201, description: "提交成功" })
+  @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
+  @ApiResponse({ status: 403, description: "权限不足，您不是该员工的上级" })
+  createDetailedBossEvaluation(
+    @Body()
+    createDetailedBossEvaluationDto: CreateDetailedBossEvaluationDto,
+    @CurrentUser() user: any
+  ) {
+    return this.evaluationsService.createDetailedBossEvaluation(
+      createDetailedBossEvaluationDto,
       user.id
     );
   }

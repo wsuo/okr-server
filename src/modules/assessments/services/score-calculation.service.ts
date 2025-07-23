@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { Template } from "../../../entities/template.entity";
 import { AssessmentParticipant } from "../../../entities/assessment-participant.entity";
 import { Evaluation } from "../../../entities/evaluation.entity";
+import { EvaluationType, EvaluationStatus } from "../../../common/enums/evaluation.enum";
 
 export interface ScoreBreakdown {
   category: string;
@@ -230,7 +231,7 @@ export class ScoreCalculationService {
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        status: "submitted",
+        status: EvaluationStatus.SUBMITTED,
       },
       relations: ["evaluator", "evaluatee"],
     });

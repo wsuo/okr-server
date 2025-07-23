@@ -118,6 +118,42 @@ export class CreateDetailedLeaderEvaluationDto {
   improvements?: string;
 }
 
+export class CreateDetailedBossEvaluationDto {
+  @ApiProperty({ description: "考核ID" })
+  @IsNumber()
+  assessment_id: number;
+
+  @ApiProperty({ description: "被评估人ID" })
+  @IsNumber()
+  evaluatee_id: number;
+
+  @ApiProperty({ description: "上级评价内容", required: false })
+  @IsString()
+  @IsOptional()
+  boss_review?: string;
+
+  @ApiProperty({ description: "详细评分", type: [DetailedCategoryScoreDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetailedCategoryScoreDto)
+  detailed_scores: DetailedCategoryScoreDto[];
+
+  @ApiProperty({ description: "整体反馈", required: false })
+  @IsString()
+  @IsOptional()
+  overall_feedback?: string;
+
+  @ApiProperty({ description: "优势总结", required: false })
+  @IsString()
+  @IsOptional()
+  strengths?: string;
+
+  @ApiProperty({ description: "改进建议", required: false })
+  @IsString()
+  @IsOptional()
+  improvements?: string;
+}
+
 export class SaveEvaluationDraftDto {
   @ApiProperty({ description: "考核ID" })
   @IsNumber()

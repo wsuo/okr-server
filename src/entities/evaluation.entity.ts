@@ -10,14 +10,18 @@ import {
 import { Assessment } from "./assessment.entity";
 import { User } from "./user.entity";
 import { timezoneTransformer } from "../common/transformers/timezone.transformer";
+import { EvaluationType, EvaluationStatus } from "../common/enums/evaluation.enum";
 
 @Entity("evaluations")
 export class Evaluation {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 20 })
-  type: string;
+  @Column({ 
+    length: 20,
+    comment: "评估类型：self-自评, leader-领导评分, boss-上级评分"
+  })
+  type: EvaluationType;
 
   @Column({ type: "decimal", precision: 5, scale: 2 })
   score: number;
@@ -38,8 +42,12 @@ export class Evaluation {
   })
   detailed_scores: any;
 
-  @Column({ length: 20, default: "draft" })
-  status: string;
+  @Column({ 
+    length: 20, 
+    default: EvaluationStatus.DRAFT,
+    comment: "评估状态：draft-草稿, submitted-已提交"
+  })
+  status: EvaluationStatus;
 
   @Column({ 
     type: "timestamp", 

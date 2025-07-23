@@ -344,7 +344,7 @@ export class UsersService {
     // 为完成的参与者计算 final_score（如果尚未计算）
     for (const participant of completedParticipants) {
       if (participant.final_score === null && participant.self_score && participant.leader_score) {
-        participant.final_score = participant.self_score * 0.3 + participant.leader_score * 0.7;
+        participant.final_score = participant.self_score * 0.4 + participant.leader_score * 0.6;
       }
     }
     
@@ -357,7 +357,7 @@ export class UsersService {
         let score = p.final_score;
         // 如果 final_score 为空但有自评和领导评分，则实时计算
         if (!score && p.self_score && p.leader_score) {
-          score = p.self_score * 0.3 + p.leader_score * 0.7;
+          score = p.self_score * 0.4 + p.leader_score * 0.6;
         }
         return parseFloat(score?.toString() || '0');
       })
@@ -589,7 +589,7 @@ export class UsersService {
       }
 
       // 获取权重配置 - 优先使用考核的模板配置快照，然后是关联的模板配置
-      let weightConfig = { self_weight: 30, leader_weight: 70 }; // 默认权重
+      let weightConfig = { self_weight: 40, leader_weight: 60 }; // 默认权重
       
       try {
         // 优先使用考核的模板配置快照

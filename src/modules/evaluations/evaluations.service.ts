@@ -9,13 +9,16 @@ import { Evaluation } from "../../entities/evaluation.entity";
 import { Assessment } from "../../entities/assessment.entity";
 import { AssessmentParticipant } from "../../entities/assessment-participant.entity";
 import { User } from "../../entities/user.entity";
+import { EvaluationType, EvaluationStatus } from "../../common/enums/evaluation.enum";
 import { CreateSelfEvaluationDto } from "./dto/create-self-evaluation.dto";
 import { CreateLeaderEvaluationDto } from "./dto/create-leader-evaluation.dto";
+import { CreateBossEvaluationDto } from "./dto/create-boss-evaluation.dto";
 import { UpdateEvaluationDto } from "./dto/update-evaluation.dto";
 import { QueryEvaluationsDto } from "./dto/query-evaluations.dto";
 import {
   CreateDetailedSelfEvaluationDto,
   CreateDetailedLeaderEvaluationDto,
+  CreateDetailedBossEvaluationDto,
   SaveEvaluationDraftDto,
   UpdateEvaluationDraftDto,
   DetailedCategoryScoreDto,
@@ -187,18 +190,18 @@ export class EvaluationsService {
           assessment: { id: createSelfEvaluationDto.assessment_id },
           evaluator: { id: evaluatorId },
           evaluatee: { id: evaluatorId },
-          type: "self",
+          type: EvaluationType.SELF,
         },
       });
 
       if (existingEvaluation) {
-        if (existingEvaluation.status === "submitted") {
+        if (existingEvaluation.status === EvaluationStatus.SUBMITTED) {
           throw new BadRequestException("已提交过自评，无法重复提交");
         }
         // 更新现有的草稿
         await this.evaluationsRepository.update(existingEvaluation.id, {
           ...createSelfEvaluationDto,
-          status: "submitted",
+          status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
 
@@ -221,12 +224,12 @@ export class EvaluationsService {
         assessment: { id: createSelfEvaluationDto.assessment_id },
         evaluator: { id: evaluatorId },
         evaluatee: { id: evaluatorId },
-        type: "self",
+        type: EvaluationType.SELF,
         score: createSelfEvaluationDto.score,
         feedback: createSelfEvaluationDto.feedback,
         strengths: createSelfEvaluationDto.strengths,
         improvements: createSelfEvaluationDto.improvements,
-        status: "submitted",
+        status: EvaluationStatus.SUBMITTED,
         submitted_at: new Date(),
       });
 
@@ -301,18 +304,18 @@ export class EvaluationsService {
           assessment: { id: createLeaderEvaluationDto.assessment_id },
           evaluator: { id: evaluatorId },
           evaluatee: { id: createLeaderEvaluationDto.evaluatee_id },
-          type: "leader",
+          type: EvaluationType.LEADER,
         },
       });
 
       if (existingEvaluation) {
-        if (existingEvaluation.status === "submitted") {
+        if (existingEvaluation.status === EvaluationStatus.SUBMITTED) {
           throw new BadRequestException("已提交过对该员工的评分，无法重复提交");
         }
         // 更新现有的草稿
         await this.evaluationsRepository.update(existingEvaluation.id, {
           ...createLeaderEvaluationDto,
-          status: "submitted",
+          status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
 
@@ -335,12 +338,12 @@ export class EvaluationsService {
         assessment: { id: createLeaderEvaluationDto.assessment_id },
         evaluator: { id: evaluatorId },
         evaluatee: { id: createLeaderEvaluationDto.evaluatee_id },
-        type: "leader",
+        type: EvaluationType.LEADER,
         score: createLeaderEvaluationDto.score,
         feedback: createLeaderEvaluationDto.feedback,
         strengths: createLeaderEvaluationDto.strengths,
         improvements: createLeaderEvaluationDto.improvements,
-        status: "submitted",
+        status: EvaluationStatus.SUBMITTED,
         submitted_at: new Date(),
       });
 
@@ -356,6 +359,125 @@ export class EvaluationsService {
       // 检查是否需要计算最终分数
       await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
+      await queryRunner.commitTransaction();
+      return this.findOne(savedEvaluation.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * 创建上级(Boss)评估
+   */
+  async createBossEvaluation(
+    createBossEvaluationDto: CreateBossEvaluationDto,
+    evaluatorId: number
+  ): Promise<Evaluation> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 验证考核是否存在且状态为active
+      const assessment = await queryRunner.manager.findOne(Assessment, {
+        where: { id: createBossEvaluationDto.assessment_id },
+      });
+
+      if (!assessment) {
+        throw new NotFoundException("考核不存在");
+      }
+
+      if (assessment.status !== "active") {
+        throw new BadRequestException("只能对进行中的考核进行评分");
+      }
+
+      // 验证被评估人是否为考核参与者
+      const participant = await queryRunner.manager.findOne(
+        AssessmentParticipant,
+        {
+          where: {
+            assessment: { id: createBossEvaluationDto.assessment_id },
+            user: { id: createBossEvaluationDto.evaluatee_id },
+          },
+        }
+      );
+
+      if (!participant) {
+        throw new NotFoundException("被评估人不是该考核的参与者");
+      }
+
+      // 验证评估者是否有权限进行上级评分（需要是被评估人的上级的上级）
+      const evaluatee = await queryRunner.manager.findOne(User, {
+        where: { id: createBossEvaluationDto.evaluatee_id },
+        relations: ["leader", "leader.leader"],
+      });
+
+      if (!evaluatee?.leader?.leader || evaluatee.leader.leader.id !== evaluatorId) {
+        throw new BadRequestException("您没有权限对该用户进行上级评分");
+      }
+
+      // 检查是否已存在上级评分
+      const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
+        where: {
+          assessment: { id: createBossEvaluationDto.assessment_id },
+          evaluatee: { id: createBossEvaluationDto.evaluatee_id },
+          type: EvaluationType.BOSS,
+        },
+      });
+
+      if (existingEvaluation) {
+        if (existingEvaluation.status === EvaluationStatus.SUBMITTED) {
+          throw new BadRequestException("上级评分已提交，无法重复提交");
+        }
+
+        // 更新现有评分
+        await queryRunner.manager.update(Evaluation, existingEvaluation.id, {
+          ...createBossEvaluationDto,
+          status: EvaluationStatus.SUBMITTED,
+          submitted_at: new Date(),
+        });
+
+        // 更新参与者的上级评分状态
+        await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+          boss_completed: 1,
+          boss_score: createBossEvaluationDto.score,
+          boss_submitted_at: new Date(),
+        });
+
+        // 检查是否需要计算最终分数
+        await this.calculateFinalScoreIfReady(queryRunner, participant.id);
+        await queryRunner.commitTransaction();
+        return this.findOne(existingEvaluation.id);
+      }
+
+      // 创建新的上级评分记录
+      const evaluation = this.evaluationsRepository.create({
+        assessment: { id: createBossEvaluationDto.assessment_id },
+        evaluator: { id: evaluatorId },
+        evaluatee: { id: createBossEvaluationDto.evaluatee_id },
+        type: EvaluationType.BOSS,
+        score: createBossEvaluationDto.score,
+        feedback: createBossEvaluationDto.feedback,
+        strengths: createBossEvaluationDto.strengths,
+        improvements: createBossEvaluationDto.improvements,
+        status: EvaluationStatus.SUBMITTED,
+        submitted_at: new Date(),
+      });
+
+      const savedEvaluation = await queryRunner.manager.save(evaluation);
+
+      // 更新参与者的上级评分状态
+      await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+        boss_completed: 1,
+        boss_score: createBossEvaluationDto.score,
+        boss_submitted_at: new Date(),
+      });
+
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
       await queryRunner.commitTransaction();
       return this.findOne(savedEvaluation.id);
     } catch (error) {
@@ -452,7 +574,7 @@ export class EvaluationsService {
           assessment: { id: participant.assessment.id },
           evaluator: { id: userId },
           evaluatee: { id: participant.user.id },
-          type: "leader",
+          type: EvaluationType.LEADER,
         },
         relations: ["assessment", "evaluatee", "evaluatee.department"],
       });
@@ -463,9 +585,9 @@ export class EvaluationsService {
           assessment: participant.assessment,
           evaluator: { id: userId },
           evaluatee: participant.user,
-          type: "leader",
+          type: EvaluationType.LEADER,
           score: 0,
-          status: "draft",
+          status: EvaluationStatus.DRAFT,
         });
         evaluation = await this.evaluationsRepository.save(evaluation);
         
@@ -542,11 +664,28 @@ export class EvaluationsService {
     }
 
     // 确定评估类型
-    const evaluationType = userId === currentUserId ? "self" : "leader";
+    let evaluationType: EvaluationType;
+    if (userId === currentUserId) {
+      evaluationType = EvaluationType.SELF;
+    } else {
+      // 检查是否为直属领导关系
+      const evaluatee = await this.usersRepository.findOne({
+        where: { id: userId },
+        relations: ["leader", "leader.leader"],
+      });
+
+      if (evaluatee?.leader?.id === currentUserId) {
+        evaluationType = EvaluationType.LEADER;
+      } else if (evaluatee?.leader?.leader?.id === currentUserId) {
+        evaluationType = EvaluationType.BOSS;
+      } else {
+        throw new BadRequestException("您没有权限对该用户进行评分");
+      }
+    }
 
     // 过滤模板类别（如果是自评，过滤掉仅限领导的项目）
     let filteredCategories = baseTemplate.categories;
-    if (evaluationType === "self") {
+    if (evaluationType === EvaluationType.SELF) {
       filteredCategories = baseTemplate.categories.filter(
         (cat) => !cat.special_attributes?.leader_only
       );
@@ -564,7 +703,7 @@ export class EvaluationsService {
 
     // 获取被评估人信息（如果不是自评）
     let evaluateeName = "";
-    if (evaluationType === "leader") {
+    if (evaluationType === EvaluationType.LEADER || evaluationType === EvaluationType.BOSS) {
       const evaluatee = await this.usersRepository.findOne({
         where: { id: userId },
         select: ["id", "name"],
@@ -577,8 +716,8 @@ export class EvaluationsService {
       categories: filteredCategories,
       current_user_id: currentUserId,
       evaluation_type: evaluationType,
-      evaluatee_id: evaluationType === "leader" ? userId : undefined,
-      evaluatee_name: evaluationType === "leader" ? evaluateeName : undefined,
+      evaluatee_id: evaluationType !== EvaluationType.SELF ? userId : undefined,
+      evaluatee_name: evaluationType !== EvaluationType.SELF ? evaluateeName : undefined,
       existing_evaluation_id: existingEvaluation?.id,
       current_status: existingEvaluation
         ? existingEvaluation.status === "submitted"
@@ -597,7 +736,7 @@ export class EvaluationsService {
     await this.validateDetailedScores(
       createDetailedSelfEvaluationDto.assessment_id,
       createDetailedSelfEvaluationDto.detailed_scores,
-      "self"
+      EvaluationType.SELF
     );
 
     // 计算总分
@@ -641,7 +780,7 @@ export class EvaluationsService {
           assessment: { id: createDetailedSelfEvaluationDto.assessment_id },
           evaluator: { id: evaluatorId },
           evaluatee: { id: evaluatorId },
-          type: "self",
+          type: EvaluationType.SELF,
         },
       });
 
@@ -653,13 +792,13 @@ export class EvaluationsService {
         assessment: { id: createDetailedSelfEvaluationDto.assessment_id },
         evaluator: { id: evaluatorId },
         evaluatee: { id: evaluatorId },
-        type: "self",
+        type: EvaluationType.SELF,
         score: totalScore,
         feedback: createDetailedSelfEvaluationDto.self_review || createDetailedSelfEvaluationDto.overall_feedback,
         strengths: createDetailedSelfEvaluationDto.strengths,
         improvements: createDetailedSelfEvaluationDto.improvements,
         detailed_scores: createDetailedSelfEvaluationDto.detailed_scores,
-        status: "submitted",
+        status: EvaluationStatus.SUBMITTED,
         submitted_at: new Date(),
       };
 
@@ -706,7 +845,7 @@ export class EvaluationsService {
     await this.validateDetailedScores(
       createDetailedLeaderEvaluationDto.assessment_id,
       createDetailedLeaderEvaluationDto.detailed_scores,
-      "leader"
+      EvaluationType.LEADER
     );
 
     // 计算总分
@@ -759,7 +898,7 @@ export class EvaluationsService {
           assessment: { id: createDetailedLeaderEvaluationDto.assessment_id },
           evaluator: { id: evaluatorId },
           evaluatee: { id: createDetailedLeaderEvaluationDto.evaluatee_id },
-          type: "leader",
+          type: EvaluationType.LEADER,
         },
       });
 
@@ -771,13 +910,13 @@ export class EvaluationsService {
         assessment: { id: createDetailedLeaderEvaluationDto.assessment_id },
         evaluator: { id: evaluatorId },
         evaluatee: { id: createDetailedLeaderEvaluationDto.evaluatee_id },
-        type: "leader",
+        type: EvaluationType.LEADER,
         score: totalScore,
         feedback: createDetailedLeaderEvaluationDto.leader_review || createDetailedLeaderEvaluationDto.overall_feedback,
         strengths: createDetailedLeaderEvaluationDto.strengths,
         improvements: createDetailedLeaderEvaluationDto.improvements,
         detailed_scores: createDetailedLeaderEvaluationDto.detailed_scores,
-        status: "submitted",
+        status: EvaluationStatus.SUBMITTED,
         submitted_at: new Date(),
       };
 
@@ -816,6 +955,144 @@ export class EvaluationsService {
     }
   }
 
+  /**
+   * 创建详细的上级(Boss)评估
+   */
+  async createDetailedBossEvaluation(
+    createDetailedBossEvaluationDto: CreateDetailedBossEvaluationDto,
+    evaluatorId: number
+  ): Promise<Evaluation> {
+    // 验证评分数据
+    await this.validateDetailedScores(
+      createDetailedBossEvaluationDto.assessment_id,
+      createDetailedBossEvaluationDto.detailed_scores,
+      EvaluationType.BOSS
+    );
+
+    // 计算总分
+    const totalScore = await this.calculateTotalScore(
+      createDetailedBossEvaluationDto.assessment_id,
+      createDetailedBossEvaluationDto.detailed_scores
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 验证考核状态
+      const assessment = await queryRunner.manager.findOne(Assessment, {
+        where: { id: createDetailedBossEvaluationDto.assessment_id },
+      });
+
+      if (!assessment) {
+        throw new NotFoundException("考核不存在");
+      }
+
+      if (assessment.status !== "active") {
+        throw new BadRequestException("只能对进行中的考核进行评分");
+      }
+
+      // 验证参与者
+      const participant = await queryRunner.manager.findOne(
+        AssessmentParticipant,
+        {
+          where: {
+            assessment: { id: createDetailedBossEvaluationDto.assessment_id },
+            user: { id: createDetailedBossEvaluationDto.evaluatee_id },
+          },
+        }
+      );
+
+      if (!participant) {
+        throw new NotFoundException("被评估人不是该考核的参与者");
+      }
+
+      // 验证上级评分权限
+      const evaluatee = await queryRunner.manager.findOne(User, {
+        where: { id: createDetailedBossEvaluationDto.evaluatee_id },
+        relations: ["leader", "leader.leader"],
+      });
+
+      if (!evaluatee?.leader?.leader || evaluatee.leader.leader.id !== evaluatorId) {
+        throw new BadRequestException("您没有权限对该用户进行上级评分");
+      }
+
+      // 检查是否已存在上级评分
+      const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
+        where: {
+          assessment: { id: createDetailedBossEvaluationDto.assessment_id },
+          evaluator: { id: evaluatorId },
+          evaluatee: { id: createDetailedBossEvaluationDto.evaluatee_id },
+          type: EvaluationType.BOSS,
+        },
+      });
+
+      if (existingEvaluation) {
+        if (existingEvaluation.status === EvaluationStatus.SUBMITTED) {
+          throw new BadRequestException("上级评分已提交，无法重复提交");
+        }
+
+        // 更新现有评分
+        await queryRunner.manager.update(Evaluation, existingEvaluation.id, {
+          score: totalScore,
+          feedback: createDetailedBossEvaluationDto.boss_review || createDetailedBossEvaluationDto.overall_feedback,
+          strengths: createDetailedBossEvaluationDto.strengths,
+          improvements: createDetailedBossEvaluationDto.improvements,
+          detailed_scores: createDetailedBossEvaluationDto.detailed_scores,
+          status: EvaluationStatus.SUBMITTED,
+          submitted_at: new Date(),
+        });
+
+        // 更新参与者的上级评分状态
+        await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+          boss_completed: 1,
+          boss_score: totalScore,
+          boss_submitted_at: new Date(),
+        });
+
+        // 检查是否需要计算最终分数
+        await this.calculateFinalScoreIfReady(queryRunner, participant.id);
+        await queryRunner.commitTransaction();
+        return this.findOne(existingEvaluation.id);
+      }
+
+      // 创建新的上级评分记录
+      const evaluation = this.evaluationsRepository.create({
+        assessment: { id: createDetailedBossEvaluationDto.assessment_id },
+        evaluator: { id: evaluatorId },
+        evaluatee: { id: createDetailedBossEvaluationDto.evaluatee_id },
+        type: EvaluationType.BOSS,
+        score: totalScore,
+        feedback: createDetailedBossEvaluationDto.boss_review || createDetailedBossEvaluationDto.overall_feedback,
+        strengths: createDetailedBossEvaluationDto.strengths,
+        improvements: createDetailedBossEvaluationDto.improvements,
+        detailed_scores: createDetailedBossEvaluationDto.detailed_scores,
+        status: EvaluationStatus.SUBMITTED,
+        submitted_at: new Date(),
+      });
+
+      const savedEvaluation = await queryRunner.manager.save(evaluation);
+
+      // 更新参与者的上级评分状态
+      await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+        boss_completed: 1,
+        boss_score: totalScore,
+        boss_submitted_at: new Date(),
+      });
+
+      // 检查是否需要计算最终分数
+      await this.calculateFinalScoreIfReady(queryRunner, participant.id);
+      await queryRunner.commitTransaction();
+      return this.findOne(savedEvaluation.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   // 私有辅助方法
   private async checkUserEvaluationPermission(
     assessmentId: number,
@@ -839,36 +1116,59 @@ export class EvaluationsService {
       return { canEvaluate: true };
     }
 
-    // 领导评分权限检查
+    // 领导评分权限检查（包括直属领导和上级）
     const evaluatee = await this.usersRepository.findOne({
       where: { id: userId },
-      relations: ["leader"],
+      relations: ["leader", "leader.leader"],
     });
 
-    if (!evaluatee || evaluatee.leader?.id !== currentUserId) {
-      return { canEvaluate: false, reason: "您不是该员工的直属领导" };
+    if (!evaluatee) {
+      return { canEvaluate: false, reason: "用户不存在" };
     }
 
-    // 检查被评估人是否参与了考核
-    const participant = await this.participantsRepository.findOne({
-      where: {
-        assessment: { id: assessmentId },
-        user: { id: userId },
-        deleted_at: null,
-      },
-    });
+    // 检查是否为直属领导
+    if (evaluatee.leader?.id === currentUserId) {
+      // 检查被评估人是否参与了考核
+      const participant = await this.participantsRepository.findOne({
+        where: {
+          assessment: { id: assessmentId },
+          user: { id: userId },
+          deleted_at: null,
+        },
+      });
 
-    if (!participant) {
-      return { canEvaluate: false, reason: "该员工未参与此考核" };
+      if (!participant) {
+        return { canEvaluate: false, reason: "该员工未参与此考核" };
+      }
+
+      return { canEvaluate: true };
     }
 
-    return { canEvaluate: true };
+    // 检查是否为上级（Boss）
+    if (evaluatee.leader?.leader?.id === currentUserId) {
+      // 检查被评估人是否参与了考核
+      const participant = await this.participantsRepository.findOne({
+        where: {
+          assessment: { id: assessmentId },
+          user: { id: userId },
+          deleted_at: null,
+        },
+      });
+
+      if (!participant) {
+        return { canEvaluate: false, reason: "该员工未参与此考核" };
+      }
+
+      return { canEvaluate: true };
+    }
+
+    return { canEvaluate: false, reason: "您不是该员工的直属领导或上级" };
   }
 
   private async validateDetailedScores(
     assessmentId: number,
     detailedScores: DetailedCategoryScoreDto[],
-    evaluationType: "self" | "leader"
+    evaluationType: EvaluationType
   ): Promise<void> {
     const template = await this.getEvaluationTemplate(assessmentId);
 
@@ -1025,7 +1325,7 @@ export class EvaluationsService {
         assessment: { id: saveEvaluationDraftDto.assessment_id },
         evaluator: { id: currentUserId },
         evaluatee: { id: evaluateeId },
-        type: saveEvaluationDraftDto.type,
+        type: saveEvaluationDraftDto.type as EvaluationType,
       },
     });
 
@@ -1059,7 +1359,7 @@ export class EvaluationsService {
       assessment: { id: saveEvaluationDraftDto.assessment_id },
       evaluator: { id: currentUserId },
       evaluatee: { id: evaluateeId },
-      type: saveEvaluationDraftDto.type,
+      type: saveEvaluationDraftDto.type as EvaluationType,
       score: totalScore,
       feedback:
         saveEvaluationDraftDto.leader_review ||
@@ -1068,7 +1368,7 @@ export class EvaluationsService {
       strengths: saveEvaluationDraftDto.strengths,
       improvements: saveEvaluationDraftDto.improvements,
       detailed_scores: saveEvaluationDraftDto.detailed_scores,
-      status: "draft",
+      status: EvaluationStatus.DRAFT,
     });
 
     const savedEvaluation = await this.evaluationsRepository.save(evaluation);
@@ -1276,7 +1576,7 @@ export class EvaluationsService {
           assessment: { id: assessmentId },
           evaluator: { id: currentUserId },
           evaluatee: { id: participant.user.id },
-          type: "leader",
+          type: EvaluationType.LEADER,
         },
       });
 
@@ -1379,7 +1679,7 @@ export class EvaluationsService {
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        type: 'self',
+        type: EvaluationType.SELF,
       },
     });
 
@@ -1388,7 +1688,7 @@ export class EvaluationsService {
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        type: 'leader',
+        type: EvaluationType.LEADER,
       },
       relations: ['evaluator'],
     });
@@ -1513,8 +1813,8 @@ export class EvaluationsService {
         where: {
           assessment: { id: assessmentId },
           evaluatee: { id: userId },
-          type: "self",
-          status: "submitted",
+          type: EvaluationType.SELF,
+          status: EvaluationStatus.SUBMITTED,
         },
         relations: ["evaluator"],
       }),
@@ -1522,8 +1822,8 @@ export class EvaluationsService {
         where: {
           assessment: { id: assessmentId },
           evaluatee: { id: userId },
-          type: "leader",
-          status: "submitted",
+          type: EvaluationType.LEADER,
+          status: EvaluationStatus.SUBMITTED,
         },
         relations: ["evaluator"],
       }),
@@ -1601,7 +1901,7 @@ export class EvaluationsService {
           assessment: { id: participant.assessment.id },
           evaluator: { id: userId },
           evaluatee: { id: userId },
-          type: "self",
+          type: EvaluationType.SELF,
         },
       });
 
@@ -1688,7 +1988,7 @@ export class EvaluationsService {
           assessment: { id: participant.assessment.id },
           evaluator: { id: userId },
           evaluatee: { id: participant.user.id },
-          type: "leader",
+          type: EvaluationType.LEADER,
         },
       });
 
@@ -1864,7 +2164,7 @@ export class EvaluationsService {
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        type: 'self',
+        type: EvaluationType.SELF,
       },
     });
 
@@ -1873,7 +2173,7 @@ export class EvaluationsService {
       where: {
         assessment: { id: assessmentId },
         evaluatee: { id: userId },
-        type: 'leader',
+        type: EvaluationType.LEADER,
       },
       relations: ['evaluator'],
     });
@@ -2090,7 +2390,8 @@ export class EvaluationsService {
   }
 
   /**
-   * 检查是否双方评分都完成，如果完成则自动计算最终分数
+   * 检查是否评分都完成，如果完成则自动计算最终分数
+   * 支持三维度评分：自评 + 领导评分 + 上级评分（可选）
    */
   private async calculateFinalScoreIfReady(queryRunner: any, participantId: number): Promise<void> {
     // 重新获取参与者信息，确保获取最新状态
@@ -2104,15 +2405,37 @@ export class EvaluationsService {
       return;
     }
 
-    // 检查是否双方评分都已完成
-    if (participant.self_completed === 1 && participant.leader_completed === 1) {
-      try {
-        // 获取权重配置
-        const weightConfig = await this.getWeightConfig(participant.assessment.id);
+    try {
+      // 获取权重配置
+      const weightConfig = await this.getWeightConfig(participant.assessment.id);
+      
+      // 检查必需的评分是否都已完成（自评和领导评分是必需的）
+      const selfCompleted = participant.self_completed === 1;
+      const leaderCompleted = participant.leader_completed === 1;
+      const bossCompleted = participant.boss_completed === 1;
+      
+      // 如果启用了boss评分且boss评分权重大于0，则boss评分是必需的
+      const bossRequired = weightConfig.boss_enabled && weightConfig.boss_weight > 0;
+      const requiredEvaluationsComplete = selfCompleted && leaderCompleted && (!bossRequired || bossCompleted);
+      
+      if (requiredEvaluationsComplete) {
+        // 计算最终分数：支持三维度权重计算
+        let finalScore = 0;
         
-        // 计算最终分数
-        const finalScore = participant.self_score * weightConfig.self_weight + 
-                          participant.leader_score * weightConfig.leader_weight;
+        // 自评部分
+        if (participant.self_score !== null && weightConfig.self_weight > 0) {
+          finalScore += participant.self_score * weightConfig.self_weight;
+        }
+        
+        // 领导评分部分
+        if (participant.leader_score !== null && weightConfig.leader_weight > 0) {
+          finalScore += participant.leader_score * weightConfig.leader_weight;
+        }
+        
+        // 上级评分部分（可选）
+        if (participant.boss_score !== null && weightConfig.boss_weight > 0) {
+          finalScore += participant.boss_score * weightConfig.boss_weight;
+        }
         
         // 保留两位小数
         const roundedFinalScore = Math.round(finalScore * 100) / 100;
@@ -2121,22 +2444,40 @@ export class EvaluationsService {
         await queryRunner.manager.update(AssessmentParticipant, participantId, {
           final_score: roundedFinalScore,
         });
-
-        console.log(`✅ 自动计算最终分数完成 - 参与者ID: ${participantId}, 自评: ${participant.self_score}, 领导评分: ${participant.leader_score}, 最终分数: ${roundedFinalScore}`);
+        
+        // 记录日志：根据是否包含boss评分显示不同信息
+        if (weightConfig.boss_enabled && participant.boss_score !== null) {
+          console.log(`✅ 三维度评分计算完成 - 参与者ID: ${participantId}, 自评: ${participant.self_score}(${weightConfig.self_weight}), 领导: ${participant.leader_score}(${weightConfig.leader_weight}), 上级: ${participant.boss_score}(${weightConfig.boss_weight}), 最终: ${roundedFinalScore}`);
+        } else {
+          console.log(`✅ 双维度评分计算完成 - 参与者ID: ${participantId}, 自评: ${participant.self_score}(${weightConfig.self_weight}), 领导: ${participant.leader_score}(${weightConfig.leader_weight}), 最终: ${roundedFinalScore}`);
+        }
         
         // 检查是否所有参与者都已完成评分，如果是则自动结束考核
         await this.checkAndAutoEndAssessment(queryRunner, participant.assessment.id);
-      } catch (error) {
-        console.error(`❌ 计算最终分数失败 - 参与者ID: ${participantId}`, error);
-        // 不抛出错误，避免影响主流程
+      } else {
+        // 记录等待状态
+        const waitingFor = [];
+        if (!selfCompleted) waitingFor.push('自评');
+        if (!leaderCompleted) waitingFor.push('领导评分');
+        if (bossRequired && !bossCompleted) waitingFor.push('上级评分');
+        
+        console.log(`⏳ 等待评分完成 - 参与者ID: ${participantId}, 待完成: ${waitingFor.join(', ')}`);
       }
+    } catch (error) {
+      console.error(`❌ 计算最终分数失败 - 参与者ID: ${participantId}`, error);
+      // 不抛出错误，避免影响主流程
     }
   }
 
   /**
    * 获取权重配置，优先使用assessment的template_config
    */
-  private async getWeightConfig(assessmentId: number): Promise<{ self_weight: number; leader_weight: number }> {
+  private async getWeightConfig(assessmentId: number): Promise<{ 
+    self_weight: number; 
+    leader_weight: number; 
+    boss_weight: number;
+    boss_enabled: boolean;
+  }> {
     try {
       // 获取考核信息，包含模板配置快照
       const assessment = await this.assessmentsRepository.findOne({
@@ -2165,22 +2506,28 @@ export class EvaluationsService {
 
       // 从配置中提取权重
       if (templateConfig?.scoring_rules) {
-        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
-        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
+        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.27;
+        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.63;
+        const bossWeight = templateConfig.scoring_rules.boss_evaluation?.weight_in_final || 0.10;
+        const bossEnabled = templateConfig.scoring_rules.boss_evaluation?.enabled !== false;
         
         return {
           self_weight: selfWeight,
           leader_weight: leaderWeight,
+          boss_weight: bossWeight,
+          boss_enabled: bossEnabled,
         };
       }
     } catch (error) {
       console.warn(`解析权重配置失败 (assessment_id: ${assessmentId}):`, error);
     }
 
-    // 使用默认权重配置
+    // 使用默认权重配置 (向后兼容：如果没有boss评分，按原权重分配)
     return {
-      self_weight: 0.3,  // 30%
-      leader_weight: 0.7, // 70%
+      self_weight: 0.4,   // 40%
+      leader_weight: 0.6, // 60%
+      boss_weight: 0.0,   // 0% (兼容模式)
+      boss_enabled: false,
     };
   }
 

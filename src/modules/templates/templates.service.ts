@@ -419,10 +419,24 @@ export class TemplatesService {
         config.scoring_rules.self_evaluation?.weight_in_final || 0;
       const leaderWeight =
         config.scoring_rules.leader_evaluation?.weight_in_final || 0;
-      const totalWeight = selfWeight + leaderWeight;
+      const bossWeight =
+        config.scoring_rules.boss_evaluation?.weight_in_final || 0;
+      
+      const totalWeight = selfWeight + leaderWeight + bossWeight;
 
       if (Math.abs(totalWeight - 1.0) > 0.01) {
-        errors.push(`自评和领导评价权重总和必须为1.0，当前为${totalWeight}`);
+        errors.push(`自评、领导评价和上级评价权重总和必须为1.0，当前为${totalWeight}`);
+      }
+      
+      // 验证权重合理性：每个权重应该在0-1之间
+      if (selfWeight < 0 || selfWeight > 1) {
+        errors.push(`自评权重必须在0-1之间，当前为${selfWeight}`);
+      }
+      if (leaderWeight < 0 || leaderWeight > 1) {
+        errors.push(`领导评价权重必须在0-1之间，当前为${leaderWeight}`);
+      }
+      if (bossWeight < 0 || bossWeight > 1) {
+        errors.push(`上级评价权重必须在0-1之间，当前为${bossWeight}`);
       }
     }
 
