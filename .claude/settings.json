@@ -1,9 +1,6 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
-    "disableBypassPermissionsMode": false,
     "allow": [
-      "*",
       "Bash(*)",
       "Read(*)",
       "Write(*)",
@@ -36,5 +33,5 @@
     "autoApprove": true,
     "alwaysAllow": true
   },
-  "defaultMode": "bypassPermissions"
+  "dangerouslySkipPermissions": true
 }
