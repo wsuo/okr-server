@@ -47,7 +47,7 @@ export class DefaultAssessmentTemplateSeed {
           id: "work_performance",
           name: "工作绩效",
           description: "衡量员工工作成果和执行能力",
-          weight: 60, // 权重60%
+          weight: 67, // 权重67% (原60%在自评和领导评分中的占比：60/90*100≈67%)
           evaluator_types: ["self", "leader"], // 自评和领导评价
           items: [
             {
@@ -127,7 +127,7 @@ export class DefaultAssessmentTemplateSeed {
           id: "daily_management",
           name: "日常管理",
           description: "日常工作行为和规范遵守情况",
-          weight: 30, // 权重30%
+          weight: 33, // 权重33% (原30%在自评和领导评分中的占比：30/90*100≈33%)
           evaluator_types: ["self", "leader"], // 自评和领导评价
           items: [
             {
@@ -223,35 +223,6 @@ export class DefaultAssessmentTemplateSeed {
             },
           ],
         },
-        {
-          id: "leader_evaluation",
-          name: "领导评价",
-          description: "领导对员工的专项工作评价",
-          weight: 10, // 权重10%
-          evaluator_types: ["leader"], // 仅限领导评价
-          special_attributes: {
-            leader_only: true, // 特殊属性：仅限领导评分
-            required_role: "leader",
-          },
-          items: [
-            {
-              id: "special_task_completion",
-              name: "交代的专项按时完成并及时反馈",
-              description: "对领导交代的特殊任务的完成情况和反馈及时性",
-              weight: 100, // 这个大项下只有一个子项
-              max_score: 100,
-              scoring_criteria: {
-                excellent: {
-                  min: 90,
-                  description: "专项任务完成出色，反馈及时详细",
-                },
-                good: { min: 80, description: "专项任务按时完成，反馈及时" },
-                average: { min: 70, description: "专项任务基本完成，反馈一般" },
-                poor: { min: 0, description: "专项任务完成不佳或反馈不及时" },
-              },
-            },
-          ],
-        },
       ],
 
       // 评分规则
@@ -296,13 +267,74 @@ export class DefaultAssessmentTemplateSeed {
           "4. 上级评分为可选项，可根据实际情况决定是否参与",
         ],
       },
+
+      // 老板评分独立模板配置（100分制）
+      boss_evaluation_template: {
+        description: "上级(Boss)对员工的整体评价，独立100分制",
+        scoring_method: "simple", // 简单评分法
+        evaluation_criteria: [
+          {
+            id: "overall_performance",
+            name: "整体工作表现",
+            description: "从上级视角评估员工的综合工作表现",
+            weight: 40,
+            scoring_guide: {
+              excellent: { min: 90, description: "表现卓越，超出预期" },
+              good: { min: 80, description: "表现良好，符合预期" },
+              average: { min: 70, description: "表现一般，基本达标" },
+              poor: { min: 0, description: "表现不佳，需要改进" }
+            }
+          },
+          {
+            id: "strategic_contribution",
+            name: "战略贡献度",
+            description: "对公司战略目标的贡献程度",
+            weight: 30,
+            scoring_guide: {
+              excellent: { min: 90, description: "战略贡献突出，具有前瞻性" },
+              good: { min: 80, description: "有效支持战略目标达成" },
+              average: { min: 70, description: "基本参与战略执行" },
+              poor: { min: 0, description: "战略贡献有限" }
+            }
+          },
+          {
+            id: "cross_department_collaboration",
+            name: "跨部门协作",
+            description: "跨部门合作和沟通协调能力",
+            weight: 20,
+            scoring_guide: {
+              excellent: { min: 90, description: "跨部门协作能力强，能够有效整合资源" },
+              good: { min: 80, description: "具备良好的跨部门合作能力" },
+              average: { min: 70, description: "能够完成基本的跨部门协作" },
+              poor: { min: 0, description: "跨部门协作能力需要提升" }
+            }
+          },
+          {
+            id: "innovation_potential",
+            name: "创新能力",
+            description: "工作方法的创新性和改进建议",
+            weight: 10,
+            scoring_guide: {
+              excellent: { min: 90, description: "具有强烈的创新意识和能力" },
+              good: { min: 80, description: "能够提出有效的改进建议" },
+              average: { min: 70, description: "具有一定的创新思维" },
+              poor: { min: 0, description: "创新能力有待提升" }
+            }
+          }
+        ],
+        feedback_template: {
+          strengths: "主要优势和亮点表现",
+          improvements: "需要改进的方面和发展建议",
+          overall_comment: "整体评价和未来期望"
+        }
+      },
     };
 
     // 创建模板
     const template = templateRepository.create({
       name: "系统默认考核模板",
       description:
-        "系统内置的标准化绩效考核模板，包含工作绩效(60%)、日常管理(30%)、领导评价(10%)三个维度的全面评估",
+        "系统内置的标准化绩效考核模板，包含工作绩效(67%)、日常管理(33%)两个维度的员工和领导评分，以及独立的上级评分系统",
       type: "assessment",
       config: templateConfig,
       is_default: 1, // 设为默认模板
@@ -315,14 +347,17 @@ export class DefaultAssessmentTemplateSeed {
     console.log("✅ 默认考核模板创建成功");
     console.log(`模板ID: ${template.id}`);
     console.log("模板配置包含:");
-    console.log("- 工作绩效 (60%): 工作饱和度、执行度、完成度、效率、质量");
-    console.log(
-      "- 日常管理 (30%): 工作态度、审批流程、出勤、汇报、团队活动、环境维护、制度遵守"
-    );
-    console.log("- 领导评价 (10%): 专项任务完成及反馈 (仅限领导评分)");
-    console.log("评分权重配置:");
-    console.log("- 员工自评: 36% (40% × 90%)");
-    console.log("- 领导评分: 54% (60% × 90%)");
-    console.log("- 上级评分: 10% (可选项)");
+    console.log("=== 自评和领导评分（基于100分制） ===");
+    console.log("- 工作绩效 (67%): 工作饱和度、执行度、完成度、效率、质量");
+    console.log("- 日常管理 (33%): 工作态度、审批流程、出勤、汇报、团队活动、环境维护、制度遵守");
+    console.log("=== 上级评分（独立100分制） ===");
+    console.log("- 整体工作表现 (40%): 综合工作表现评估");
+    console.log("- 战略贡献度 (30%): 对公司战略目标的贡献");
+    console.log("- 跨部门协作 (20%): 跨部门合作和沟通协调能力");
+    console.log("- 创新能力 (10%): 工作方法创新性和改进建议");
+    console.log("最终权重配置:");
+    console.log("- 员工自评: 36%");
+    console.log("- 领导评分: 54%");
+    console.log("- 上级评分: 10%");
   }
 }

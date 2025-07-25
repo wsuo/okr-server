@@ -2506,8 +2506,8 @@ export class EvaluationsService {
 
       // 从配置中提取权重
       if (templateConfig?.scoring_rules) {
-        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.27;
-        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.63;
+        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.36;
+        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.54;
         const bossWeight = templateConfig.scoring_rules.boss_evaluation?.weight_in_final || 0.10;
         const bossEnabled = templateConfig.scoring_rules.boss_evaluation?.enabled !== false;
         
@@ -2522,12 +2522,12 @@ export class EvaluationsService {
       console.warn(`解析权重配置失败 (assessment_id: ${assessmentId}):`, error);
     }
 
-    // 使用默认权重配置 (向后兼容：如果没有boss评分，按原权重分配)
+    // 使用默认权重配置 (三维度评分：36% + 54% + 10%)
     return {
-      self_weight: 0.4,   // 40%
-      leader_weight: 0.6, // 60%
-      boss_weight: 0.0,   // 0% (兼容模式)
-      boss_enabled: false,
+      self_weight: 0.36,   // 36%
+      leader_weight: 0.54, // 54%
+      boss_weight: 0.10,   // 10%
+      boss_enabled: true,  // 启用boss评分
     };
   }
 
