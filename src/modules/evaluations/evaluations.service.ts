@@ -326,6 +326,9 @@ export class EvaluationsService {
           leader_submitted_at: new Date(),
         });
 
+        // 领导评分完成后，自动创建老板评分任务（如果需要）
+        await this.createBossEvaluationTaskIfNeeded(queryRunner, participant);
+
         // 检查是否需要计算最终分数
         await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
@@ -355,6 +358,9 @@ export class EvaluationsService {
         leader_score: createLeaderEvaluationDto.score,
         leader_submitted_at: new Date(),
       });
+
+      // 领导评分完成后，自动创建老板评分任务（如果需要）
+      await this.createBossEvaluationTaskIfNeeded(queryRunner, participant);
 
       // 检查是否需要计算最终分数
       await this.calculateFinalScoreIfReady(queryRunner, participant.id);
@@ -1394,6 +1400,13 @@ export class EvaluationsService {
       );
       tasks.push(...leaderTasks);
 
+      // 获取老板评分任务
+      const bossTasks = await this.getBossEvaluationTasks(
+        userId,
+        assessmentId
+      );
+      tasks.push(...bossTasks);
+
       // 按截止时间排序
       return tasks.sort((a, b) => {
         const dateA = new Date(a.deadline);
@@ -1471,8 +1484,11 @@ export class EvaluationsService {
     const leaderCompletedCount = participants.filter(
       (p) => p.leader_completed === 1
     ).length;
+    const bossCompletedCount = participants.filter(
+      (p) => p.boss_completed === 1
+    ).length;
     const fullyCompletedCount = participants.filter(
-      (p) => p.self_completed === 1 && p.leader_completed === 1
+      (p) => p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
     ).length;
 
     // 计算完成率
@@ -1483,6 +1499,10 @@ export class EvaluationsService {
     const leaderCompletionRate =
       totalParticipants > 0
         ? (leaderCompletedCount / totalParticipants) * 100
+        : 0;
+    const bossCompletionRate =
+      totalParticipants > 0
+        ? (bossCompletedCount / totalParticipants) * 100
         : 0;
     const overallCompletionRate =
       totalParticipants > 0
@@ -1522,8 +1542,13 @@ export class EvaluationsService {
         p.leader_completed === 1
           ? ("completed" as const)
           : ("not_started" as const),
+      boss_status:
+        p.boss_completed === 1
+          ? ("completed" as const)
+          : ("not_started" as const),
       self_completed_at: p.self_submitted_at,
       leader_completed_at: p.leader_submitted_at,
+      boss_completed_at: p.boss_submitted_at,
     }));
 
     return {
@@ -1532,9 +1557,11 @@ export class EvaluationsService {
       total_participants: totalParticipants,
       self_completed_count: selfCompletedCount,
       leader_completed_count: leaderCompletedCount,
+      boss_completed_count: bossCompletedCount,
       fully_completed_count: fullyCompletedCount,
       self_completion_rate: Math.round(selfCompletionRate * 100) / 100,
       leader_completion_rate: Math.round(leaderCompletionRate * 100) / 100,
+      boss_completion_rate: Math.round(bossCompletionRate * 100) / 100,
       overall_completion_rate: Math.round(overallCompletionRate * 100) / 100,
       participants: participantDetails,
       deadline: assessment.deadline,
@@ -2390,6 +2417,78 @@ export class EvaluationsService {
   }
 
   /**
+   * 领导评分完成后，自动创建老板评分任务（如果需要）
+   */
+  private async createBossEvaluationTaskIfNeeded(
+    queryRunner: any, 
+    participant: any
+  ): Promise<void> {
+    try {
+      // 获取权重配置，检查是否需要boss评分
+      const weightConfig = await this.getWeightConfig(participant.assessment.id);
+      
+      if (!weightConfig.boss_enabled || weightConfig.boss_weight <= 0) {
+        console.log(`⏭️ Boss评分未启用 - 参与者ID: ${participant.id}`);
+        return;
+      }
+
+      // 获取被评估人信息，找到其上级（老板）
+      const evaluatee = await queryRunner.manager.findOne(this.usersRepository.target, {
+        where: { id: participant.user_id || participant.user?.id },
+        relations: ['leader', 'leader.leader'],
+      });
+
+      if (!evaluatee?.leader?.leader) {
+        console.log(`⚠️ 未找到被评估人的上级 - 参与者ID: ${participant.id}`);
+        return;
+      }
+
+      const bossId = evaluatee.leader.leader.id;
+      const evaluateeId = evaluatee.id;
+      const assessmentId = participant.assessment.id || participant.assessment_id;
+
+      // 检查是否已经存在boss评分记录
+      const existingBossEvaluation = await queryRunner.manager.findOne(this.evaluationsRepository.target, {
+        where: {
+          assessment: { id: assessmentId },
+          evaluator: { id: bossId },
+          evaluatee: { id: evaluateeId },
+          type: EvaluationType.BOSS,
+        },
+      });
+
+      if (existingBossEvaluation) {
+        console.log(`📋 Boss评分任务已存在 - 参与者ID: ${participant.id}, Boss ID: ${bossId}`);
+        return;
+      }
+
+      // 创建boss评分任务（draft状态）
+      const bossEvaluationTask = queryRunner.manager.create(this.evaluationsRepository.target, {
+        assessment: { id: assessmentId },
+        evaluator: { id: bossId },
+        evaluatee: { id: evaluateeId },
+        type: EvaluationType.BOSS,
+        status: EvaluationStatus.DRAFT,
+        score: null,
+        feedback: null,
+        strengths: null,
+        improvements: null,
+        submitted_at: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+
+      await queryRunner.manager.save(this.evaluationsRepository.target, bossEvaluationTask);
+
+      console.log(`✅ 已创建Boss评分任务 - 参与者ID: ${participant.id}, Boss ID: ${bossId}, 评估ID: ${bossEvaluationTask.id}`);
+      
+    } catch (error) {
+      console.error(`❌ 创建Boss评分任务失败 - 参与者ID: ${participant.id}`, error);
+      // 不抛出错误，避免影响主流程
+    }
+  }
+
+  /**
    * 检查是否评分都完成，如果完成则自动计算最终分数
    * 支持三维度评分：自评 + 领导评分 + 上级评分（可选）
    */
@@ -2575,5 +2674,85 @@ export class EvaluationsService {
       console.error(`❌ 检查考核完成状态失败 - 考核ID: ${assessmentId}`, error);
       // 不抛出错误，避免影响主流程
     }
+  }
+
+  /**
+   * 获取老板评分任务列表
+   * 查找当前用户需要进行boss评分的任务
+   */
+  private async getBossEvaluationTasks(
+    userId: number,
+    assessmentId?: number
+  ): Promise<EvaluationTaskDto[]> {
+    const tasks: EvaluationTaskDto[] = [];
+
+    // 查找所有当前用户作为evaluator且类型为BOSS的评估记录
+    const whereCondition: any = {
+      evaluator: { id: userId },
+      type: EvaluationType.BOSS,
+    };
+
+    if (assessmentId) {
+      whereCondition.assessment = { id: assessmentId };
+    }
+
+    const bossEvaluations = await this.evaluationsRepository.find({
+      where: whereCondition,
+      relations: [
+        'assessment',
+        'evaluatee',
+        'evaluatee.department',
+        'evaluatee.leader'
+      ],
+    });
+
+    for (const evaluation of bossEvaluations) {
+      // 只处理进行中的考核
+      if (evaluation.assessment.status !== 'active') {
+        continue;
+      }
+
+      // 确定任务状态
+      let status: "pending" | "in_progress" | "completed" = "pending";
+      if (evaluation.status === EvaluationStatus.SUBMITTED) {
+        status = "completed";
+      } else if (evaluation.status === EvaluationStatus.DRAFT && 
+                 (evaluation.score !== null || evaluation.feedback)) {
+        status = "in_progress";
+      }
+
+      const now = new Date();
+      const deadline = new Date(evaluation.assessment.deadline);
+
+      // 检查日期有效性
+      if (isNaN(deadline.getTime())) {
+        console.warn(
+          `Invalid deadline for assessment ${evaluation.assessment.id}: ${evaluation.assessment.deadline}`
+        );
+        continue;
+      }
+
+      const task = {
+        id: `boss-${evaluation.assessment.id}-${evaluation.evaluatee.id}`,
+        assessment_id: evaluation.assessment.id,
+        assessment_title: evaluation.assessment.title,
+        assessment_period: evaluation.assessment.period,
+        type: "boss" as const,
+        evaluatee_id: evaluation.evaluatee.id,
+        evaluatee_name: evaluation.evaluatee.name,
+        evaluatee_department: evaluation.evaluatee.department?.name || "",
+        status,
+        deadline,
+        is_overdue: now > deadline && status !== "completed",
+        evaluation_id: evaluation.id,
+        last_updated: evaluation.updated_at,
+        // 额外信息：显示被评估人的直属领导
+        evaluatee_leader_name: evaluation.evaluatee.leader?.name || "未知",
+      };
+
+      tasks.push(task);
+    }
+
+    return tasks;
   }
 }

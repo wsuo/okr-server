@@ -13,8 +13,8 @@ export class EvaluationTaskDto {
   @ApiProperty({ description: "考核周期" })
   assessment_period: string;
 
-  @ApiProperty({ description: "任务类型", enum: ["self", "leader"] })
-  type: "self" | "leader";
+  @ApiProperty({ description: "任务类型", enum: ["self", "leader", "boss"] })
+  type: "self" | "leader" | "boss";
 
   @ApiProperty({ description: "被评估人ID" })
   evaluatee_id: number;
@@ -60,7 +60,10 @@ export class EvaluationProgressDto {
   @ApiProperty({ description: "已完成领导评分人数" })
   leader_completed_count: number;
 
-  @ApiProperty({ description: "完全完成人数（自评+领导评分都完成）" })
+  @ApiProperty({ description: "已完成上级评分人数" })
+  boss_completed_count: number;
+
+  @ApiProperty({ description: "完全完成人数（所有必需评分都完成）" })
   fully_completed_count: number;
 
   @ApiProperty({ description: "自评完成率" })
@@ -68,6 +71,9 @@ export class EvaluationProgressDto {
 
   @ApiProperty({ description: "领导评分完成率" })
   leader_completion_rate: number;
+
+  @ApiProperty({ description: "上级评分完成率" })
+  boss_completion_rate: number;
 
   @ApiProperty({ description: "整体完成率" })
   overall_completion_rate: number;
@@ -79,8 +85,10 @@ export class EvaluationProgressDto {
     department: string;
     self_status: "not_started" | "in_progress" | "completed";
     leader_status: "not_started" | "in_progress" | "completed";
+    boss_status: "not_started" | "in_progress" | "completed";
     self_completed_at?: Date;
     leader_completed_at?: Date;
+    boss_completed_at?: Date;
   }[];
 
   @ApiProperty({ description: "考核截止时间" })
