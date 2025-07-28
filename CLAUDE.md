@@ -74,7 +74,9 @@ This is a NestJS-based OKR (Objectives and Key Results) performance management s
 
 **3. Performance Assessment System**
 - Template-based evaluations with configurable scoring
-- Dual evaluation model: self-evaluation (30%) + leader evaluation (70%)
+- Multiple evaluation models supported:
+  - Traditional model: self-evaluation + leader evaluation (configurable weights)
+  - Two-tier weighted model: boss evaluation + (self + leader) evaluation with nested weights
 - Assessment lifecycle management (draft → active → completed → ended)
 - Complex weighted scoring across multiple categories
 
@@ -94,12 +96,15 @@ This is a NestJS-based OKR (Objectives and Key Results) performance management s
 
 **Assessment Flow**:
 - Assessments → AssessmentParticipants → Evaluations
-- Two evaluation types: 'self' and 'leader'
-- Final scoring calculation in `assessments.service.ts:220-221`
+- Three evaluation types: 'self', 'leader', and 'boss' (optional)
+- Final scoring calculation supports both traditional and two-tier weighted models
 
 **Template Configuration**:
 - Complex JSON schema stored in `templates.config` field
 - Multi-level weighting system (categories → items → evaluators)
+- Two scoring modes supported:
+  - Traditional: `self_evaluation.weight_in_final` + `leader_evaluation.weight_in_final`
+  - Two-tier: `two_tier_config` with nested boss and employee+leader weights
 - Validation logic in `templates.service.ts`
 
 ### Database Schema Patterns
@@ -112,10 +117,35 @@ This is a NestJS-based OKR (Objectives and Key Results) performance management s
 
 ### Critical Business Logic
 
-**Assessment Scoring Algorithm** (in `assessments.service.ts`):
+**Assessment Scoring Algorithm**:
+The system supports two scoring models:
+
+1. **Traditional Model** (backward compatibility):
 ```typescript
-participant.final_score = participant.self_score * 0.3 + participant.leader_score * 0.7;
+participant.final_score = participant.self_score * self_weight + participant.leader_score * leader_weight;
 ```
+
+2. **Two-Tier Weighted Model** (new feature):
+```typescript
+// Configuration example from template:
+"scoring_rules": {
+  "scoring_mode": "two_tier_weighted",
+  "two_tier_config": {
+    "boss_weight": 10,                          // 10% boss evaluation
+    "employee_leader_weight": 90,               // 90% employee+leader combined
+    "self_weight_in_employee_leader": 40,       // 40% self within employee+leader layer
+    "leader_weight_in_employee_leader": 60      // 60% leader within employee+leader layer
+  }
+}
+
+// Final calculation:
+final_score = boss_score * 0.10 + (self_score * 0.40 + leader_score * 0.60) * 0.90
+```
+
+**Implementation locations**:
+- Weight parsing: `evaluations.service.ts:getWeightConfig()` (line ~2608)
+- Score calculation: `score-calculation.service.ts:calculateSingleParticipantScore()` (line ~121)
+- Legacy fallback: `users.service.ts` (line ~347, marked for refactor)
 
 **Template Validation**: Complex validation logic in `templates.service.ts` ensures weight totals equal 1.0 for evaluator types.
 

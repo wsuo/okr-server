@@ -118,10 +118,20 @@ export class ScoreCalculationService {
     }
 
     // 根据评估者权重计算最终得分
-    const selfWeight = scoringRules.self_evaluation.weight_in_final;
-    const leaderWeight = scoringRules.leader_evaluation.weight_in_final;
-    const finalScore =
-      totalSelfScore * selfWeight + totalLeaderScore * leaderWeight;
+    const config = this.parseTemplateWeights(scoringRules);
+    
+    let finalScore = 0;
+    if (config.scoring_mode === 'two_tier_weighted') {
+      // 两层加权模式：boss权重 + (self权重 + leader权重) * employee_leader权重
+      const bossScore = 0; // TODO: 需要获取boss评分
+      const employeeLeaderScore = totalSelfScore * config.self_weight_in_employee_leader + totalLeaderScore * config.leader_weight_in_employee_leader;
+      finalScore = bossScore * config.boss_weight + employeeLeaderScore * config.employee_leader_weight;
+    } else {
+      // 传统模式：直接权重计算
+      const selfWeight = config.self_weight || scoringRules.self_evaluation?.weight_in_final || 0.3;
+      const leaderWeight = config.leader_weight || scoringRules.leader_evaluation?.weight_in_final || 0.7;
+      finalScore = totalSelfScore * selfWeight + totalLeaderScore * leaderWeight;
+    }
 
     return {
       userId: participant.user.id,
@@ -271,13 +281,49 @@ export class ScoreCalculationService {
   }
 
   /**
+   * 解析模板权重配置，支持新旧两种格式
+   */
+  private parseTemplateWeights(scoringRules: any): any {
+    // 新的两层加权模式
+    if (scoringRules.scoring_mode === 'two_tier_weighted' && scoringRules.two_tier_config) {
+      const config = scoringRules.two_tier_config;
+      return {
+        scoring_mode: 'two_tier_weighted',
+        boss_weight: config.boss_weight / 100,
+        employee_leader_weight: config.employee_leader_weight / 100,
+        self_weight_in_employee_leader: config.self_weight_in_employee_leader / 100,
+        leader_weight_in_employee_leader: config.leader_weight_in_employee_leader / 100,
+      };
+    }
+    
+    // 传统模式
+    return {
+      scoring_mode: 'traditional',
+      self_weight: scoringRules.self_evaluation?.weight_in_final || 0.3,
+      leader_weight: scoringRules.leader_evaluation?.weight_in_final || 0.7,
+      boss_weight: scoringRules.boss_evaluation?.weight_in_final || 0,
+    };
+  }
+
+  /**
    * 获取模板的评估者权重配置
    */
   getEvaluatorWeights(template: Template): { self: number; leader: number } {
     const config = template.config;
+    const weightConfig = this.parseTemplateWeights(config.scoring_rules);
+    
+    if (weightConfig.scoring_mode === 'two_tier_weighted') {
+      // 两层加权模式下返回在employee_leader层级的权重
+      return {
+        self: weightConfig.self_weight_in_employee_leader,
+        leader: weightConfig.leader_weight_in_employee_leader,
+      };
+    }
+    
+    // 传统模式
     return {
-      self: config.scoring_rules?.self_evaluation?.weight_in_final || 0.3,
-      leader: config.scoring_rules?.leader_evaluation?.weight_in_final || 0.7,
+      self: weightConfig.self_weight,
+      leader: weightConfig.leader_weight,
     };
   }
 }

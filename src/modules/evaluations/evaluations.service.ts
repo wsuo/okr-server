@@ -1696,9 +1696,21 @@ export class EvaluationsService {
       throw new NotFoundException('您未参与此考核');
     }
 
-    // 检查考核是否已完成（自评和领导评分都已完成）
-    if (participant.self_completed !== 1 || participant.leader_completed !== 1) {
-      throw new BadRequestException('考核尚未完成，无法查看结果详情');
+    // 获取权重配置以确定是否需要boss评分
+    const weightConfig = await this.getWeightConfig(assessmentId);
+    const bossRequired = weightConfig.boss_enabled && weightConfig.boss_weight > 0;
+    
+    // 检查考核是否已完成（根据配置决定是否需要boss评分）
+    const evaluationsComplete = participant.self_completed === 1 && 
+                                participant.leader_completed === 1 && 
+                                (!bossRequired || participant.boss_completed === 1);
+                                
+    if (!evaluationsComplete) {
+      const missingEvaluations = [];
+      if (participant.self_completed !== 1) missingEvaluations.push('自评');
+      if (participant.leader_completed !== 1) missingEvaluations.push('领导评分');
+      if (bossRequired && participant.boss_completed !== 1) missingEvaluations.push('上级评分');
+      throw new BadRequestException(`考核尚未完成，缺少：${missingEvaluations.join('、')}`);
     }
 
     // 获取自评记录
@@ -1719,8 +1731,21 @@ export class EvaluationsService {
       },
       relations: ['evaluator'],
     });
+    
+    // 获取上级评分记录（如果需要）
+    let bossEvaluation = null;
+    if (bossRequired) {
+      bossEvaluation = await this.evaluationsRepository.findOne({
+        where: {
+          assessment: { id: assessmentId },
+          evaluatee: { id: userId },
+          type: EvaluationType.BOSS,
+        },
+        relations: ['evaluator'],
+      });
+    }
 
-    if (!selfEvaluation || !leaderEvaluation) {
+    if (!selfEvaluation || !leaderEvaluation || (bossRequired && !bossEvaluation)) {
       throw new BadRequestException('评估记录不完整');
     }
 
@@ -1773,9 +1798,32 @@ export class EvaluationsService {
             )
           : null,
       },
+      boss_evaluation: bossEvaluation ? {
+        score: bossEvaluation.score,
+        submitted_at: bossEvaluation.submitted_at,
+        boss_name: bossEvaluation.evaluator?.name || '',
+        review: bossEvaluation.feedback,
+        strengths: bossEvaluation.strengths,
+        improvements: bossEvaluation.improvements,
+        detailed_scores: bossEvaluation.detailed_scores
+          ? await this.enrichDetailedScoresWithTemplate(
+              assessmentId,
+              bossEvaluation.detailed_scores
+            )
+          : null,
+      } : null,
+      weight_config: {
+        scoring_mode: weightConfig.boss_enabled && weightConfig.boss_weight > 0 ? 'two_tier_weighted' : 'traditional',
+        boss_weight: weightConfig.boss_weight,
+        self_weight: weightConfig.self_weight,
+        leader_weight: weightConfig.leader_weight,
+        boss_enabled: weightConfig.boss_enabled,
+      },
       score_difference: {
-        total_difference: Math.abs(selfEvaluation.score - leaderEvaluation.score),
-        self_higher: selfEvaluation.score > leaderEvaluation.score,
+        self_leader_difference: Math.abs(selfEvaluation.score - leaderEvaluation.score),
+        self_boss_difference: bossEvaluation ? Math.abs(selfEvaluation.score - bossEvaluation.score) : null,
+        leader_boss_difference: bossEvaluation ? Math.abs(leaderEvaluation.score - bossEvaluation.score) : null,
+        self_higher_than_leader: selfEvaluation.score > leaderEvaluation.score,
         agreement_level: this.calculateAgreementLevel(
           Math.abs(selfEvaluation.score - leaderEvaluation.score)
         ),
@@ -1783,7 +1831,8 @@ export class EvaluationsService {
       comparison_analysis: this.generateComparisonAnalysis(
         selfEvaluation,
         leaderEvaluation,
-        template
+        template,
+        bossEvaluation  // 添加boss评分参数
       ),
       completed_at: participant.updated_at,
     };
@@ -1891,7 +1940,8 @@ export class EvaluationsService {
       comparison_analysis: this.generateComparisonAnalysis(
         selfEvaluation,
         leaderEvaluation,
-        template
+        template,
+        bossEvaluation  // 添加boss评分参数
       ),
     };
   }
@@ -2104,48 +2154,40 @@ export class EvaluationsService {
   private generateComparisonAnalysis(
     selfEvaluation: any,
     leaderEvaluation: any,
-    template: any
+    template: any,
+    bossEvaluation?: any
   ): any {
     if (!selfEvaluation || !leaderEvaluation) {
       return { message: "需要自评和领导评分都完成才能进行对比分析" };
     }
 
-    const scoreDifference = Math.abs(
-      selfEvaluation.score - leaderEvaluation.score
-    );
-    const analysis = {
-      overall_score_difference: Math.round(scoreDifference * 100) / 100,
-      agreement_level:
-        scoreDifference <= 5
-          ? "high"
-          : scoreDifference <= 10
-          ? "medium"
-          : "low",
-      category_differences: [],
+    const comparisons = {
+      self_vs_leader: {
+        score_difference: Math.abs(selfEvaluation.score - leaderEvaluation.score),
+        self_higher: selfEvaluation.score > leaderEvaluation.score,
+        agreement_level: Math.abs(selfEvaluation.score - leaderEvaluation.score) <= 5 ? 'high' : 
+                        Math.abs(selfEvaluation.score - leaderEvaluation.score) <= 10 ? 'medium' : 'low'
+      }
     };
 
-    // 如果有详细评分，进行分类别对比
-    if (selfEvaluation.detailed_scores && leaderEvaluation.detailed_scores) {
-      for (const selfCategory of selfEvaluation.detailed_scores) {
-        const leaderCategory = leaderEvaluation.detailed_scores.find(
-          (cat) => cat.categoryId === selfCategory.categoryId
-        );
-
-        if (leaderCategory) {
-          const categoryDiff = Math.abs(
-            selfCategory.categoryScore - leaderCategory.categoryScore
-          );
-          analysis.category_differences.push({
-            categoryId: selfCategory.categoryId,
-            difference: Math.round(categoryDiff * 100) / 100,
-            self_score: Math.round(selfCategory.categoryScore * 100) / 100,
-            leader_score: Math.round(leaderCategory.categoryScore * 100) / 100,
-          });
-        }
-      }
+    // 如果有boss评分，添加相关对比
+    if (bossEvaluation) {
+      comparisons['self_vs_boss'] = {
+        score_difference: Math.abs(selfEvaluation.score - bossEvaluation.score),
+        self_higher: selfEvaluation.score > bossEvaluation.score,
+        agreement_level: Math.abs(selfEvaluation.score - bossEvaluation.score) <= 5 ? 'high' : 
+                        Math.abs(selfEvaluation.score - bossEvaluation.score) <= 10 ? 'medium' : 'low'
+      };
+      
+      comparisons['leader_vs_boss'] = {
+        score_difference: Math.abs(leaderEvaluation.score - bossEvaluation.score),
+        leader_higher: leaderEvaluation.score > bossEvaluation.score,
+        agreement_level: Math.abs(leaderEvaluation.score - bossEvaluation.score) <= 5 ? 'high' : 
+                        Math.abs(leaderEvaluation.score - bossEvaluation.score) <= 10 ? 'medium' : 'low'
+      };
     }
 
-    return analysis;
+    return comparisons;
   }
 
   async getCompleteEvaluation(
@@ -2205,6 +2247,19 @@ export class EvaluationsService {
       relations: ['evaluator'],
     });
 
+    // 获取boss评分记录
+    const bossEvaluation = await this.evaluationsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        evaluatee: { id: userId },
+        type: EvaluationType.BOSS,
+      },
+      relations: ['evaluator'],
+    });
+
+    // 获取权重配置
+    const weightConfig = await this.getWeightConfig(assessmentId);
+
     // 构建考核信息
     const assessmentInfo: AssessmentInfoDto = {
       assessment_id: assessment.id,
@@ -2262,6 +2317,23 @@ export class EvaluationsService {
       detailed_scores: [],
     };
 
+    // 构建boss评分详情（如果存在）
+    let bossEvaluationDetail = null;
+    if (participant.boss_completed === 1 || bossEvaluation) {
+      bossEvaluationDetail = {
+        evaluation_id: bossEvaluation?.id || 0,
+        boss_id: bossEvaluation?.evaluator?.id || 0,
+        boss_name: bossEvaluation?.evaluator?.name || '',
+        completed: participant.boss_completed === 1,
+        submitted_at: participant.boss_submitted_at || new Date(),
+        overall_score: Math.round(parseFloat(participant.boss_score?.toString() || '0') * 100) / 100,
+        review: bossEvaluation?.feedback || '',
+        strengths: bossEvaluation?.strengths || '',
+        improvements: bossEvaluation?.improvements || '',
+        detailed_scores: [],
+      };
+    }
+
     // 如果包含详细评分信息，解析详细分数
     if (query.include_details && template) {
       if (selfEvaluation?.detailed_scores) {
@@ -2287,6 +2359,19 @@ export class EvaluationsService {
           console.warn('Failed to parse leader evaluation detailed scores:', error);
         }
       }
+
+      // 解析boss评分详细分数
+      if (bossEvaluation?.detailed_scores && bossEvaluationDetail) {
+        try {
+          const bossDetailedScores = JSON.parse(bossEvaluation.detailed_scores);
+          bossEvaluationDetail.detailed_scores = await this.enrichDetailedScoresWithTemplate(
+            assessmentId,
+            bossDetailedScores
+          );
+        } catch (error) {
+          console.warn('Failed to parse boss evaluation detailed scores:', error);
+        }
+      }
     }
 
     // 构建最终结果
@@ -2297,21 +2382,55 @@ export class EvaluationsService {
     else if (finalScore >= 70) finalLevel = '合格';
     else finalLevel = '待改进';
 
+    // 构建权重配置和计算详情
+    let calculationDetails: any;
+    let calculationMethod: string;
+    
+    if (weightConfig.boss_enabled && weightConfig.boss_weight > 0) {
+      // 两层加权模式
+      calculationMethod = 'two_tier_weighted';
+      const bossScore = bossEvaluationDetail?.overall_score || 0;
+      const employeeLeaderScore = selfEvaluationDetail.overall_score * weightConfig.self_weight + 
+                                 leaderEvaluationDetail.overall_score * weightConfig.leader_weight;
+      
+      calculationDetails = {
+        scoring_mode: 'two_tier_weighted',
+        boss_weighted_score: Math.round(bossScore * weightConfig.boss_weight * 100) / 100,
+        employee_leader_combined_score: Math.round(employeeLeaderScore * 100) / 100,
+        employee_leader_weighted_score: Math.round(employeeLeaderScore * (1 - weightConfig.boss_weight) * 100) / 100,
+        total_score: Math.round((bossScore * weightConfig.boss_weight + employeeLeaderScore * (1 - weightConfig.boss_weight)) * 100) / 100,
+        rounded_score: finalScore,
+        breakdown: {
+          self_contribution: Math.round(selfEvaluationDetail.overall_score * weightConfig.self_weight * (1 - weightConfig.boss_weight) * 100) / 100,
+          leader_contribution: Math.round(leaderEvaluationDetail.overall_score * weightConfig.leader_weight * (1 - weightConfig.boss_weight) * 100) / 100,
+          boss_contribution: Math.round(bossScore * weightConfig.boss_weight * 100) / 100,
+        }
+      };
+    } else {
+      // 传统模式
+      calculationMethod = 'traditional_weighted';
+      calculationDetails = {
+        scoring_mode: 'traditional',
+        self_weighted_score: Math.round(selfEvaluationDetail.overall_score * weightConfig.self_weight * 100) / 100,
+        leader_weighted_score: Math.round(leaderEvaluationDetail.overall_score * weightConfig.leader_weight * 100) / 100,
+        total_score: Math.round((selfEvaluationDetail.overall_score * weightConfig.self_weight + leaderEvaluationDetail.overall_score * weightConfig.leader_weight) * 100) / 100,
+        rounded_score: finalScore,
+      };
+    }
+
     const finalResult: FinalResultDto = {
       final_score: finalScore,
       final_level: finalLevel,
-      calculation_method: 'weighted_average',
+      calculation_method: calculationMethod,
       weight_config: {
-        self_weight: 30,
-        leader_weight: 70,
+        scoring_mode: weightConfig.boss_enabled && weightConfig.boss_weight > 0 ? 'two_tier_weighted' : 'traditional',
+        self_weight: Math.round(weightConfig.self_weight * 100),
+        leader_weight: Math.round(weightConfig.leader_weight * 100),
+        boss_weight: Math.round(weightConfig.boss_weight * 100),
+        boss_enabled: weightConfig.boss_enabled,
       },
-      calculation_details: {
-        self_weighted_score: Math.round(selfEvaluationDetail.overall_score * 0.3 * 100) / 100,
-        leader_weighted_score: Math.round(leaderEvaluationDetail.overall_score * 0.7 * 100) / 100,
-        total_score: Math.round((selfEvaluationDetail.overall_score * 0.3 + leaderEvaluationDetail.overall_score * 0.7) * 100) / 100,
-        rounded_score: finalScore,
-      },
-      completed_at: participant.leader_submitted_at || participant.updated_at,
+      calculation_details: calculationDetails,
+      completed_at: participant.boss_submitted_at || participant.leader_submitted_at || participant.updated_at,
     };
 
     // 构建对比分析
@@ -2394,11 +2513,25 @@ export class EvaluationsService {
       });
     }
 
-    if (participant.self_completed === 1 && participant.leader_completed === 1) {
+    if (participant.boss_submitted_at && bossEvaluation?.evaluator) {
+      timeline.push({
+        event: 'boss_evaluation_submitted',
+        description: 'Boss完成评分',
+        timestamp: participant.boss_submitted_at,
+        actor: bossEvaluation.evaluator.name,
+      });
+    }
+
+    // 根据权重配置决定完成条件
+    const isFullyCompleted = participant.self_completed === 1 && 
+                            participant.leader_completed === 1 && 
+                            (!weightConfig.boss_enabled || !weightConfig.boss_weight || participant.boss_completed === 1);
+                            
+    if (isFullyCompleted) {
       timeline.push({
         event: 'assessment_completed',
         description: '考核完成',
-        timestamp: participant.leader_submitted_at || participant.updated_at,
+        timestamp: participant.boss_submitted_at || participant.leader_submitted_at || participant.updated_at,
         actor: '系统',
       });
     }
@@ -2410,6 +2543,7 @@ export class EvaluationsService {
       evaluatee_info: evaluateeInfo,
       self_evaluation: selfEvaluationDetail,
       leader_evaluation: leaderEvaluationDetail,
+      boss_evaluation: bossEvaluationDetail,
       final_result: finalResult,
       comparison_analysis: comparisonAnalysis,
       timeline,
@@ -2605,17 +2739,39 @@ export class EvaluationsService {
 
       // 从配置中提取权重
       if (templateConfig?.scoring_rules) {
-        const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.36;
-        const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.54;
-        const bossWeight = templateConfig.scoring_rules.boss_evaluation?.weight_in_final || 0.10;
-        const bossEnabled = templateConfig.scoring_rules.boss_evaluation?.enabled !== false;
-        
-        return {
-          self_weight: selfWeight,
-          leader_weight: leaderWeight,
-          boss_weight: bossWeight,
-          boss_enabled: bossEnabled,
-        };
+        // 支持新的两层加权模式
+        if (templateConfig.scoring_rules.scoring_mode === 'two_tier_weighted' && templateConfig.scoring_rules.two_tier_config) {
+          const config = templateConfig.scoring_rules.two_tier_config;
+          const bossWeight = config.boss_weight / 100; // 转换为小数
+          const employeeLeaderWeight = config.employee_leader_weight / 100;
+          const selfWeightInEmployeeLeader = config.self_weight_in_employee_leader / 100;
+          const leaderWeightInEmployeeLeader = config.leader_weight_in_employee_leader / 100;
+          
+          // 计算最终权重：两层加权
+          const selfWeight = selfWeightInEmployeeLeader * employeeLeaderWeight;
+          const leaderWeight = leaderWeightInEmployeeLeader * employeeLeaderWeight;
+          
+          return {
+            self_weight: selfWeight,
+            leader_weight: leaderWeight,
+            boss_weight: bossWeight,
+            boss_enabled: true,
+          };
+        }
+        // 兼容旧的配置格式
+        else {
+          const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.36;
+          const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.54;
+          const bossWeight = templateConfig.scoring_rules.boss_evaluation?.weight_in_final || 0.10;
+          const bossEnabled = templateConfig.scoring_rules.boss_evaluation?.enabled !== false;
+          
+          return {
+            self_weight: selfWeight,
+            leader_weight: leaderWeight,
+            boss_weight: bossWeight,
+            boss_enabled: bossEnabled,
+          };
+        }
       }
     } catch (error) {
       console.warn(`解析权重配置失败 (assessment_id: ${assessmentId}):`, error);

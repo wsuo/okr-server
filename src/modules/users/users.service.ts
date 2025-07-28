@@ -344,6 +344,9 @@ export class UsersService {
     // 为完成的参与者计算 final_score（如果尚未计算）
     for (const participant of completedParticipants) {
       if (participant.final_score === null && participant.self_score && participant.leader_score) {
+        // TODO: 应该根据考核的模板配置动态计算权重，而不是硬编码
+        // 这里使用固定权重作为fallback，但在实际业务中应该通过EvaluationsService.getWeightConfig获取正确权重
+        console.warn(`参与者 ${participant.user?.id} 的final_score未计算，使用fallback权重 (40%/60%)`);
         participant.final_score = participant.self_score * 0.4 + participant.leader_score * 0.6;
       }
     }
