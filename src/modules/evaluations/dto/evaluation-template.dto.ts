@@ -123,4 +123,16 @@ export class UserEvaluationTemplateDto extends EvaluationTemplateResponseDto {
     required: false,
   })
   current_status?: "not_started" | "draft" | "submitted";
+
+  @ApiProperty({ 
+    description: "是否为老板简化评分模式", 
+    required: false 
+  })
+  is_boss_simplified?: boolean;
+
+  @ApiProperty({ 
+    description: "老板评分说明", 
+    required: false 
+  })
+  boss_evaluation_note?: string;
 }

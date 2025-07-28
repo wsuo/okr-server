@@ -415,14 +415,22 @@ export class EvaluationsService {
         throw new NotFoundException("被评估人不是该考核的参与者");
       }
 
-      // 验证评估者是否有权限进行上级评分（需要是被评估人的上级的上级）
-      const evaluatee = await queryRunner.manager.findOne(User, {
-        where: { id: createBossEvaluationDto.evaluatee_id },
-        relations: ["leader", "leader.leader"],
+      // 验证评估者权限：在两层加权模式下，老板可以对任何已完成自评和领导评分的员工进行评分
+      const assessment_with_template = await queryRunner.manager.findOne(Assessment, {
+        where: { id: createBossEvaluationDto.assessment_id },
+        relations: ['template'],
       });
 
-      if (!evaluatee?.leader?.leader || evaluatee.leader.leader.id !== evaluatorId) {
-        throw new BadRequestException("您没有权限对该用户进行上级评分");
+      const templateConfig = assessment_with_template.template_config || assessment_with_template.template?.config;
+      
+      // 检查是否为两层加权模式
+      if (templateConfig?.scoring_rules?.scoring_mode !== 'two_tier_weighted') {
+        throw new BadRequestException("只有两层加权模式的考核支持老板评分");
+      }
+
+      // 检查员工是否已完成自评和领导评分
+      if (participant.self_completed !== 1 || participant.leader_completed !== 1) {
+        throw new BadRequestException("员工必须先完成自评和领导评分，才能进行老板评分");
       }
 
       // 检查是否已存在上级评分
@@ -674,6 +682,15 @@ export class EvaluationsService {
     if (userId === currentUserId) {
       evaluationType = EvaluationType.SELF;
     } else {
+      // 获取考核信息检查是否为两层加权模式
+      const assessment = await this.assessmentsRepository.findOne({
+        where: { id: assessmentId },
+        relations: ['template'],
+      });
+
+      const templateConfig = assessment.template_config || assessment.template?.config;
+      const isTwoTierMode = templateConfig?.scoring_rules?.scoring_mode === 'two_tier_weighted';
+
       // 检查是否为直属领导关系
       const evaluatee = await this.usersRepository.findOne({
         where: { id: userId },
@@ -682,19 +699,28 @@ export class EvaluationsService {
 
       if (evaluatee?.leader?.id === currentUserId) {
         evaluationType = EvaluationType.LEADER;
+      } else if (isTwoTierMode) {
+        // 在两层加权模式下，任何有权限的用户都可以进行老板评分
+        evaluationType = EvaluationType.BOSS;
       } else if (evaluatee?.leader?.leader?.id === currentUserId) {
+        // 传统模式下需要上下级关系
         evaluationType = EvaluationType.BOSS;
       } else {
         throw new BadRequestException("您没有权限对该用户进行评分");
       }
     }
 
-    // 过滤模板类别（如果是自评，过滤掉仅限领导的项目）
+    // 过滤模板类别
     let filteredCategories = baseTemplate.categories;
+    
     if (evaluationType === EvaluationType.SELF) {
+      // 自评时过滤掉仅限领导的项目
       filteredCategories = baseTemplate.categories.filter(
         (cat) => !cat.special_attributes?.leader_only
       );
+    } else if (evaluationType === EvaluationType.BOSS) {
+      // 老板评分不需要详细的评分项，返回空数组
+      filteredCategories = [];
     }
 
     // 检查是否已有评估记录
@@ -730,6 +756,12 @@ export class EvaluationsService {
           ? "submitted"
           : "draft"
         : "not_started",
+      // 标识是否为老板简化评分模式
+      is_boss_simplified: evaluationType === EvaluationType.BOSS,
+      // 老板评分说明
+      boss_evaluation_note: evaluationType === EvaluationType.BOSS 
+        ? "老板评分采用简化模式，只需提供总分和简要评语即可" 
+        : undefined,
     };
   }
 
@@ -1014,14 +1046,22 @@ export class EvaluationsService {
         throw new NotFoundException("被评估人不是该考核的参与者");
       }
 
-      // 验证上级评分权限
-      const evaluatee = await queryRunner.manager.findOne(User, {
-        where: { id: createDetailedBossEvaluationDto.evaluatee_id },
-        relations: ["leader", "leader.leader"],
+      // 验证评估者权限：在两层加权模式下，老板可以对任何已完成自评和领导评分的员工进行评分
+      const assessment_with_template = await queryRunner.manager.findOne(Assessment, {
+        where: { id: createDetailedBossEvaluationDto.assessment_id },
+        relations: ['template'],
       });
 
-      if (!evaluatee?.leader?.leader || evaluatee.leader.leader.id !== evaluatorId) {
-        throw new BadRequestException("您没有权限对该用户进行上级评分");
+      const templateConfig = assessment_with_template.template_config || assessment_with_template.template?.config;
+      
+      // 检查是否为两层加权模式
+      if (templateConfig?.scoring_rules?.scoring_mode !== 'two_tier_weighted') {
+        throw new BadRequestException("只有两层加权模式的考核支持老板评分");
+      }
+
+      // 检查员工是否已完成自评和领导评分
+      if (participant.self_completed !== 1 || participant.leader_completed !== 1) {
+        throw new BadRequestException("员工必须先完成自评和领导评分，才能进行老板评分");
       }
 
       // 检查是否已存在上级评分
@@ -1122,7 +1162,20 @@ export class EvaluationsService {
       return { canEvaluate: true };
     }
 
-    // 领导评分权限检查（包括直属领导和上级）
+    // 获取考核信息检查是否为两层加权模式
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: ['template'],
+    });
+
+    if (!assessment) {
+      return { canEvaluate: false, reason: "考核不存在" };
+    }
+
+    const templateConfig = assessment.template_config || assessment.template?.config;
+    const isTwoTierMode = templateConfig?.scoring_rules?.scoring_mode === 'two_tier_weighted';
+
+    // 检查被评估人信息
     const evaluatee = await this.usersRepository.findOne({
       where: { id: userId },
       relations: ["leader", "leader.leader"],
@@ -1132,39 +1185,36 @@ export class EvaluationsService {
       return { canEvaluate: false, reason: "用户不存在" };
     }
 
+    // 检查被评估人是否参与了考核
+    const participant = await this.participantsRepository.findOne({
+      where: {
+        assessment: { id: assessmentId },
+        user: { id: userId },
+        deleted_at: null,
+      },
+    });
+
+    if (!participant) {
+      return { canEvaluate: false, reason: "该员工未参与此考核" };
+    }
+
     // 检查是否为直属领导
     if (evaluatee.leader?.id === currentUserId) {
-      // 检查被评估人是否参与了考核
-      const participant = await this.participantsRepository.findOne({
-        where: {
-          assessment: { id: assessmentId },
-          user: { id: userId },
-          deleted_at: null,
-        },
-      });
-
-      if (!participant) {
-        return { canEvaluate: false, reason: "该员工未参与此考核" };
-      }
-
       return { canEvaluate: true };
     }
 
-    // 检查是否为上级（Boss）
-    if (evaluatee.leader?.leader?.id === currentUserId) {
-      // 检查被评估人是否参与了考核
-      const participant = await this.participantsRepository.findOne({
-        where: {
-          assessment: { id: assessmentId },
-          user: { id: userId },
-          deleted_at: null,
-        },
-      });
-
-      if (!participant) {
-        return { canEvaluate: false, reason: "该员工未参与此考核" };
+    // 在两层加权模式下，老板可以对所有已完成自评和领导评分的员工进行评分
+    if (isTwoTierMode) {
+      // 检查员工是否已完成自评和领导评分
+      if (participant.self_completed === 1 && participant.leader_completed === 1) {
+        return { canEvaluate: true };
+      } else {
+        return { canEvaluate: false, reason: "员工必须先完成自评和领导评分" };
       }
+    }
 
+    // 传统模式下，检查是否为上级（Boss）- 需要上下级关系
+    if (evaluatee.leader?.leader?.id === currentUserId) {
       return { canEvaluate: true };
     }
 
@@ -1858,7 +1908,7 @@ export class EvaluationsService {
     userId: number,
     currentUserId: number
   ): Promise<any> {
-    // 权限检查：用户可以查看自己的，领导可以查看下属的
+    // 权限检查：用户可以查看自己的，领导可以查看下属的，老板可以查看任何员工的
     let hasPermission = false;
 
     // 1. 用户查看自己的评分对比
@@ -1874,16 +1924,48 @@ export class EvaluationsService {
       if (evaluatee && evaluatee.leader?.id === currentUserId) {
         hasPermission = true;
       }
-    }
 
-    // TODO: 添加管理员权限检查
+      // 3. 检查老板权限：在两层加权模式下，老板可以查看任何员工的评分对比
+      if (!hasPermission) {
+        const assessment = await this.assessmentsRepository.findOne({
+          where: { id: assessmentId },
+          relations: ['template'],
+        });
+
+        const templateConfig = assessment?.template_config || assessment?.template?.config;
+        const isTwoTierMode = templateConfig?.scoring_rules?.scoring_mode === 'two_tier_weighted';
+
+        if (isTwoTierMode) {
+          // 检查当前用户是否有boss角色
+          const currentUser = await this.usersRepository.findOne({
+            where: { id: currentUserId },
+            relations: ['roles'],
+          });
+
+          const hasBossRole = currentUser?.roles?.some(role => role.code === 'boss');
+          if (hasBossRole) {
+            hasPermission = true;
+          }
+        }
+      }
+    }
 
     if (!hasPermission) {
       throw new BadRequestException("您没有权限查看此评分对比");
     }
 
-    // 获取自评和领导评分
-    const [selfEvaluation, leaderEvaluation] = await Promise.all([
+    // 获取考核信息和模板配置
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: ["template"],
+    });
+
+    if (!assessment) {
+      throw new NotFoundException("考核不存在");
+    }
+
+    // 获取自评、领导评分和老板评分
+    const [selfEvaluation, leaderEvaluation, bossEvaluation] = await Promise.all([
       this.evaluationsRepository.findOne({
         where: {
           assessment: { id: assessmentId },
@@ -1902,6 +1984,15 @@ export class EvaluationsService {
         },
         relations: ["evaluator"],
       }),
+      this.evaluationsRepository.findOne({
+        where: {
+          assessment: { id: assessmentId },
+          evaluatee: { id: userId },
+          type: EvaluationType.BOSS,
+          status: EvaluationStatus.SUBMITTED,
+        },
+        relations: ["evaluator"],
+      }),
     ]);
 
     if (!selfEvaluation && !leaderEvaluation) {
@@ -1910,6 +2001,12 @@ export class EvaluationsService {
 
     // 获取模板信息用于对比分析
     const template = await this.getEvaluationTemplate(assessmentId);
+
+    // 获取模板配置
+    const templateConfig = assessment.template_config || assessment.template?.config;
+    
+    // 计算当前得分和评估状态
+    const evaluationStatus = this.calculateEvaluationStatus(selfEvaluation, leaderEvaluation, bossEvaluation, templateConfig);
 
     return {
       assessment_id: assessmentId,
@@ -1936,11 +2033,162 @@ export class EvaluationsService {
               : null,
           }
         : null,
+      boss_evaluation: bossEvaluation
+        ? {
+            ...bossEvaluation,
+            detailed_scores_with_template: bossEvaluation.detailed_scores
+              ? await this.enrichDetailedScoresWithTemplate(
+                  assessmentId,
+                  bossEvaluation.detailed_scores
+                )
+              : null,
+          }
+        : null,
+      evaluation_status: evaluationStatus,
       comparison_analysis: this.generateComparisonAnalysis(
         selfEvaluation,
         leaderEvaluation,
         template
       ),
+    };
+  }
+
+  /**
+   * 计算评估状态和当前得分
+   */
+  private calculateEvaluationStatus(
+    selfEvaluation: any,
+    leaderEvaluation: any,
+    bossEvaluation: any,
+    templateConfig: any
+  ): any {
+    // 判断各阶段完成状态
+    const hasSelfEvaluation = !!selfEvaluation;
+    const hasLeaderEvaluation = !!leaderEvaluation;
+    const hasBossEvaluation = !!bossEvaluation;
+
+    // 解析模板配置
+    let scoringMode = 'traditional';
+    let weights = {
+      self_weight: 0.3,
+      leader_weight: 0.7,
+      boss_weight: 0,
+      boss_enabled: false,
+    };
+
+    if (templateConfig && templateConfig.scoring_rules) {
+      const scoringRules = templateConfig.scoring_rules;
+      
+      if (scoringRules.scoring_mode === 'two_tier_weighted' && scoringRules.two_tier_config) {
+        scoringMode = 'two_tier_weighted';
+        const config = scoringRules.two_tier_config;
+        
+        const bossWeight = (config.boss_weight || 0) / 100;
+        const employeeLeaderWeight = (config.employee_leader_weight || 90) / 100;
+        const selfWeightInEmployeeLeader = (config.self_weight_in_employee_leader || 40) / 100;
+        const leaderWeightInEmployeeLeader = (config.leader_weight_in_employee_leader || 60) / 100;
+        
+        weights = {
+          self_weight: selfWeightInEmployeeLeader * employeeLeaderWeight,
+          leader_weight: leaderWeightInEmployeeLeader * employeeLeaderWeight,
+          boss_weight: bossWeight,
+          boss_enabled: bossWeight > 0,
+        };
+      } else {
+        // 传统模式
+        weights = {
+          self_weight: (scoringRules.self_evaluation?.weight_in_final || 30) / 100,
+          leader_weight: (scoringRules.leader_evaluation?.weight_in_final || 70) / 100,
+          boss_weight: 0,
+          boss_enabled: false,
+        };
+      }
+    }
+
+    // 计算当前得分
+    let currentScore = 0;
+    let scoreBreakdown = {
+      self_score: selfEvaluation ? parseFloat(selfEvaluation.score) : 0,
+      leader_score: leaderEvaluation ? parseFloat(leaderEvaluation.score) : 0,
+      boss_score: bossEvaluation ? parseFloat(bossEvaluation.score) : 0,
+      weighted_self_score: 0,
+      weighted_leader_score: 0,
+      weighted_boss_score: 0,
+    };
+
+    if (weights.boss_enabled && scoringMode === 'two_tier_weighted') {
+      // 两层加权模式
+      if (hasBossEvaluation) {
+        // 如果有老板评分，使用完整的两层加权公式
+        scoreBreakdown.weighted_self_score = scoreBreakdown.self_score * weights.self_weight;
+        scoreBreakdown.weighted_leader_score = scoreBreakdown.leader_score * weights.leader_weight;
+        scoreBreakdown.weighted_boss_score = scoreBreakdown.boss_score * weights.boss_weight;
+        currentScore = scoreBreakdown.weighted_self_score + scoreBreakdown.weighted_leader_score + scoreBreakdown.weighted_boss_score;
+      } else {
+        // 如果没有老板评分，只计算员工+领导部分
+        if (hasSelfEvaluation && hasLeaderEvaluation) {
+          // 重新计算员工+领导的权重（归一化）
+          const totalEmployeeLeaderWeight = weights.self_weight + weights.leader_weight;
+          const normalizedSelfWeight = weights.self_weight / totalEmployeeLeaderWeight;
+          const normalizedLeaderWeight = weights.leader_weight / totalEmployeeLeaderWeight;
+          
+          scoreBreakdown.weighted_self_score = scoreBreakdown.self_score * normalizedSelfWeight;
+          scoreBreakdown.weighted_leader_score = scoreBreakdown.leader_score * normalizedLeaderWeight;
+          currentScore = scoreBreakdown.weighted_self_score + scoreBreakdown.weighted_leader_score;
+        } else if (hasSelfEvaluation) {
+          // 只有自评，使用自评分数
+          scoreBreakdown.weighted_self_score = scoreBreakdown.self_score;
+          currentScore = scoreBreakdown.weighted_self_score;
+        }
+      }
+    } else {
+      // 传统模式
+      if (hasSelfEvaluation && hasLeaderEvaluation) {
+        scoreBreakdown.weighted_self_score = scoreBreakdown.self_score * weights.self_weight;
+        scoreBreakdown.weighted_leader_score = scoreBreakdown.leader_score * weights.leader_weight;
+        currentScore = scoreBreakdown.weighted_self_score + scoreBreakdown.weighted_leader_score;
+      } else if (hasSelfEvaluation) {
+        // 只有自评，使用自评分数
+        scoreBreakdown.weighted_self_score = scoreBreakdown.self_score;
+        currentScore = scoreBreakdown.weighted_self_score;
+      }
+    }
+
+    // 判断评估是否完成
+    let isCompleted = false;
+    let completionStatus = 'pending'; // pending, partial, completed
+    
+    if (weights.boss_enabled) {
+      // 需要老板评分才算完成
+      isCompleted = hasSelfEvaluation && hasLeaderEvaluation && hasBossEvaluation;
+      if (hasSelfEvaluation && hasLeaderEvaluation && !hasBossEvaluation) {
+        completionStatus = 'waiting_for_boss';
+      } else if (hasSelfEvaluation && hasLeaderEvaluation && hasBossEvaluation) {
+        completionStatus = 'completed';
+      } else if (hasSelfEvaluation || hasLeaderEvaluation) {
+        completionStatus = 'partial';
+      }
+    } else {
+      // 传统模式，有自评和领导评分就算完成
+      isCompleted = hasSelfEvaluation && hasLeaderEvaluation;
+      if (hasSelfEvaluation && hasLeaderEvaluation) {
+        completionStatus = 'completed';
+      } else if (hasSelfEvaluation || hasLeaderEvaluation) {
+        completionStatus = 'partial';
+      }
+    }
+
+    return {
+      is_completed: isCompleted,
+      completion_status: completionStatus,
+      has_self_evaluation: hasSelfEvaluation,
+      has_leader_evaluation: hasLeaderEvaluation,
+      has_boss_evaluation: hasBossEvaluation,
+      boss_enabled: weights.boss_enabled,
+      scoring_mode: scoringMode,
+      current_score: Math.round(currentScore * 100) / 100, // 保留两位小数
+      score_breakdown: scoreBreakdown,
+      weight_config: weights,
     };
   }
 
@@ -2832,81 +3080,122 @@ export class EvaluationsService {
 
   /**
    * 获取老板评分任务列表
-   * 查找当前用户需要进行boss评分的任务
+   * 在两层加权模式下，老板需要对所有已完成自评和领导评分的员工进行最终评分
    */
   private async getBossEvaluationTasks(
     userId: number,
     assessmentId?: number
   ): Promise<EvaluationTaskDto[]> {
     const tasks: EvaluationTaskDto[] = [];
-
-    // 查找所有当前用户作为evaluator且类型为BOSS的评估记录
-    const whereCondition: any = {
-      evaluator: { id: userId },
-      type: EvaluationType.BOSS,
-    };
-
-    if (assessmentId) {
-      whereCondition.assessment = { id: assessmentId };
-    }
-
-    const bossEvaluations = await this.evaluationsRepository.find({
-      where: whereCondition,
-      relations: [
-        'assessment',
-        'evaluatee',
-        'evaluatee.department',
-        'evaluatee.leader'
-      ],
-    });
-
-    for (const evaluation of bossEvaluations) {
-      // 只处理进行中的考核
-      if (evaluation.assessment.status !== 'active') {
-        continue;
-      }
-
-      // 确定任务状态
-      let status: "pending" | "in_progress" | "completed" = "pending";
-      if (evaluation.status === EvaluationStatus.SUBMITTED) {
-        status = "completed";
-      } else if (evaluation.status === EvaluationStatus.DRAFT && 
-                 (evaluation.score !== null || evaluation.feedback)) {
-        status = "in_progress";
-      }
-
-      const now = new Date();
-      const deadline = new Date(evaluation.assessment.deadline);
-
-      // 检查日期有效性
-      if (isNaN(deadline.getTime())) {
-        console.warn(
-          `Invalid deadline for assessment ${evaluation.assessment.id}: ${evaluation.assessment.deadline}`
-        );
-        continue;
-      }
-
-      const task = {
-        id: `boss-${evaluation.assessment.id}-${evaluation.evaluatee.id}`,
-        assessment_id: evaluation.assessment.id,
-        assessment_title: evaluation.assessment.title,
-        assessment_period: evaluation.assessment.period,
-        type: "boss" as const,
-        evaluatee_id: evaluation.evaluatee.id,
-        evaluatee_name: evaluation.evaluatee.name,
-        evaluatee_department: evaluation.evaluatee.department?.name || "",
-        status,
-        deadline,
-        is_overdue: now > deadline && status !== "completed",
-        evaluation_id: evaluation.id,
-        last_updated: evaluation.updated_at,
-        // 额外信息：显示被评估人的直属领导
-        evaluatee_leader_name: evaluation.evaluatee.leader?.name || "未知",
+    
+    try {
+      // 构建查询条件：查找启用两层加权模式的活跃考核
+      const assessmentWhereCondition: any = {
+        status: 'active',
+        deleted_at: null,
       };
-
-      tasks.push(task);
+      
+      if (assessmentId) {
+        assessmentWhereCondition.id = assessmentId;
+      }
+      
+      // 查找所有符合条件的考核
+      const assessments = await this.assessmentsRepository.find({
+        where: assessmentWhereCondition,
+        relations: ['template'],
+      });
+      
+      // 过滤出两层加权模式的考核
+      const twoTierAssessments = assessments.filter(assessment => {
+        const templateConfig = assessment.template_config || assessment.template?.config;
+        return templateConfig?.scoring_rules?.scoring_mode === 'two_tier_weighted';
+      });
+      
+      if (twoTierAssessments.length === 0) {
+        return tasks;
+      }
+      
+      // 查找这些考核中已完成自评和领导评分的参与者
+      for (const assessment of twoTierAssessments) {
+        const participants = await this.participantsRepository.find({
+          where: {
+            assessment: { id: assessment.id },
+            self_completed: 1,
+            leader_completed: 1,
+            deleted_at: null,
+          },
+          relations: ['user', 'user.department', 'user.leader'],
+        });
+        
+        for (const participant of participants) {
+          // 检查是否已经有老板评分记录
+          const existingBossEvaluation = await this.evaluationsRepository.findOne({
+            where: {
+              assessment: { id: assessment.id },
+              evaluator: { id: userId },
+              evaluatee: { id: participant.user.id },
+              type: EvaluationType.BOSS,
+            },
+          });
+          
+          // 确定任务状态
+          let status: "pending" | "in_progress" | "completed" = "pending";
+          let evaluationId: number | undefined;
+          let lastUpdated: Date | undefined;
+          
+          if (existingBossEvaluation) {
+            evaluationId = existingBossEvaluation.id;
+            lastUpdated = existingBossEvaluation.updated_at;
+            
+            if (existingBossEvaluation.status === EvaluationStatus.SUBMITTED) {
+              status = "completed";
+            } else if (existingBossEvaluation.status === EvaluationStatus.DRAFT && 
+                       (existingBossEvaluation.score !== null || existingBossEvaluation.feedback)) {
+              status = "in_progress";
+            }
+          }
+          
+          const now = new Date();
+          const deadline = new Date(assessment.deadline);
+          
+          // 检查日期有效性
+          if (isNaN(deadline.getTime())) {
+            console.warn(
+              `Invalid deadline for assessment ${assessment.id}: ${assessment.deadline}`
+            );
+            continue;
+          }
+          
+          const task = {
+            id: `boss-${assessment.id}-${participant.user.id}`,
+            assessment_id: assessment.id,
+            assessment_title: assessment.title,
+            assessment_period: assessment.period,
+            type: "boss" as const,
+            evaluatee_id: participant.user.id,
+            evaluatee_name: participant.user.name,
+            evaluatee_department: participant.user.department?.name || "",
+            status,
+            deadline,
+            is_overdue: now > deadline && status !== "completed",
+            evaluation_id: evaluationId,
+            last_updated: lastUpdated,
+            // 额外信息：显示被评估人的直属领导
+            evaluatee_leader_name: participant.user.leader?.name || "未知",
+            // 显示自评和领导评分完成时间
+            self_completed_at: participant.self_completed === 1 ? participant.updated_at : null,
+            leader_completed_at: participant.leader_completed === 1 ? participant.updated_at : null,
+          };
+          
+          tasks.push(task);
+        }
+      }
+      
+      return tasks;
+      
+    } catch (error) {
+      console.error("Error in getBossEvaluationTasks:", error);
+      return tasks;
     }
-
-    return tasks;
   }
 }
