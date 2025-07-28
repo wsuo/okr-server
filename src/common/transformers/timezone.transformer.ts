@@ -33,11 +33,8 @@ export class TimezoneTransformer implements ValueTransformer {
   from(value: Date): Date {
     if (!value) return value;
     
-    // 将UTC时间转换为东八区时间
-    if (value instanceof Date) {
-      return new Date(value.getTime() + this.TIMEZONE_OFFSET);
-    }
-    
+    // 数据库已经存储了正确的东八区时间，直接返回
+    // 不需要再加8小时，否则会导致时间多8小时
     return value;
   }
 }
