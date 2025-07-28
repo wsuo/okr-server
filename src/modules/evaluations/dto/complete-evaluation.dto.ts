@@ -147,12 +147,29 @@ export class LeaderEvaluationDto extends DetailedEvaluationDto {
   leader_name: string;
 }
 
+export class BossEvaluationDto extends DetailedEvaluationDto {
+  @ApiProperty({ description: "BossID", example: 3 })
+  boss_id: number;
+
+  @ApiProperty({ description: "Boss姓名", example: "王五" })
+  boss_name: string;
+}
+
 export class WeightConfigInfoDto {
+  @ApiProperty({ description: "评分模式", example: "two_tier_weighted" })
+  scoring_mode?: string;
+
   @ApiProperty({ description: "自评权重", example: 30 })
   self_weight: number;
 
   @ApiProperty({ description: "领导评分权重", example: 70 })
   leader_weight: number;
+
+  @ApiProperty({ description: "Boss评分权重", example: 10 })
+  boss_weight?: number;
+
+  @ApiProperty({ description: "是否启用Boss评分", example: true })
+  boss_enabled?: boolean;
 }
 
 export class CalculationDetailsDto {
@@ -269,6 +286,9 @@ export class CompleteEvaluationResponseDto {
 
   @ApiProperty({ description: "领导评分详情", type: LeaderEvaluationDto })
   leader_evaluation: LeaderEvaluationDto;
+
+  @ApiProperty({ description: "Boss评分详情", type: BossEvaluationDto, required: false })
+  boss_evaluation?: BossEvaluationDto;
 
   @ApiProperty({ description: "最终结果", type: FinalResultDto })
   final_result: FinalResultDto;

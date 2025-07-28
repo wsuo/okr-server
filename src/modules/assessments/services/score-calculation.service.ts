@@ -90,18 +90,18 @@ export class ScoreCalculationService {
     participant: AssessmentParticipant,
     evaluations: Evaluation[]
   ): Promise<ParticipantScoreResult> {
-    const config = template.config;
-    const scoringRules = config.scoring_rules;
+    const templateConfig = template.config;
+    const scoringRules = templateConfig.scoring_rules;
 
     // 验证模板配置
-    this.validateTemplateConfig(config);
+    this.validateTemplateConfig(templateConfig);
 
     const scoreBreakdown: ScoreBreakdown[] = [];
     let totalSelfScore = 0;
     let totalLeaderScore = 0;
 
     // 按类别计算得分
-    for (const category of config.categories) {
+    for (const category of templateConfig.categories) {
       const categoryResult = this.calculateCategoryScore(
         category,
         evaluations,
@@ -118,18 +118,18 @@ export class ScoreCalculationService {
     }
 
     // 根据评估者权重计算最终得分
-    const config = this.parseTemplateWeights(scoringRules);
+    const weightConfig = this.parseTemplateWeights(scoringRules);
     
     let finalScore = 0;
-    if (config.scoring_mode === 'two_tier_weighted') {
+    if (weightConfig.scoring_mode === 'two_tier_weighted') {
       // 两层加权模式：boss权重 + (self权重 + leader权重) * employee_leader权重
       const bossScore = 0; // TODO: 需要获取boss评分
-      const employeeLeaderScore = totalSelfScore * config.self_weight_in_employee_leader + totalLeaderScore * config.leader_weight_in_employee_leader;
-      finalScore = bossScore * config.boss_weight + employeeLeaderScore * config.employee_leader_weight;
+      const employeeLeaderScore = totalSelfScore * weightConfig.self_weight_in_employee_leader + totalLeaderScore * weightConfig.leader_weight_in_employee_leader;
+      finalScore = bossScore * weightConfig.boss_weight + employeeLeaderScore * weightConfig.employee_leader_weight;
     } else {
       // 传统模式：直接权重计算
-      const selfWeight = config.self_weight || scoringRules.self_evaluation?.weight_in_final || 0.3;
-      const leaderWeight = config.leader_weight || scoringRules.leader_evaluation?.weight_in_final || 0.7;
+      const selfWeight = weightConfig.self_weight || scoringRules.self_evaluation?.weight_in_final || 0.3;
+      const leaderWeight = weightConfig.leader_weight || scoringRules.leader_evaluation?.weight_in_final || 0.7;
       finalScore = totalSelfScore * selfWeight + totalLeaderScore * leaderWeight;
     }
 

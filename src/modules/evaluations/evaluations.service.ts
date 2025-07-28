@@ -1831,8 +1831,7 @@ export class EvaluationsService {
       comparison_analysis: this.generateComparisonAnalysis(
         selfEvaluation,
         leaderEvaluation,
-        template,
-        bossEvaluation  // 添加boss评分参数
+        template
       ),
       completed_at: participant.updated_at,
     };
@@ -1940,8 +1939,7 @@ export class EvaluationsService {
       comparison_analysis: this.generateComparisonAnalysis(
         selfEvaluation,
         leaderEvaluation,
-        template,
-        bossEvaluation  // 添加boss评分参数
+        template
       ),
     };
   }
