@@ -12,6 +12,7 @@ import { Department } from "../../entities/department.entity";
 import { Assessment } from "../../entities/assessment.entity";
 import { AssessmentParticipant } from "../../entities/assessment-participant.entity";
 import { Evaluation } from "../../entities/evaluation.entity";
+import { EvaluationType } from "../../common/enums/evaluation.enum";
 import { BcryptUtil } from "../../common/utils/bcrypt.util";
 import {
   PaginationUtil,
@@ -259,6 +260,61 @@ export class UsersService {
         };
 
         if (participant) {
+          // 计算当前员工+领导的加权分数
+          let currentEmployeeScore: number | undefined;
+          
+          if (participant.self_score && participant.leader_score && latestAssessment) {
+            try {
+              // 获取考核的模板配置来计算权重
+              const assessment = await this.assessmentRepository.findOne({
+                where: { id: latestAssessment.id },
+                relations: ['template'],
+              });
+              
+              let templateConfig = null;
+              
+              // 优先使用考核的模板配置快照
+              if (assessment?.template_config) {
+                templateConfig = typeof assessment.template_config === 'string' 
+                  ? JSON.parse(assessment.template_config) 
+                  : assessment.template_config;
+              }
+              // 如果没有模板配置快照，尝试从关联的模板获取
+              else if (assessment?.template?.config) {
+                templateConfig = typeof assessment.template.config === 'string' 
+                  ? JSON.parse(assessment.template.config) 
+                  : assessment.template.config;
+              }
+              
+              if (templateConfig?.scoring_rules) {
+                const scoringMode = templateConfig.scoring_rules.scoring_mode;
+                const selfScore = parseFloat(participant.self_score.toString());
+                const leaderScore = parseFloat(participant.leader_score.toString());
+                
+                if (scoringMode === 'two_tier_weighted' && templateConfig.scoring_rules.two_tier_config) {
+                  // 两层加权模式：从 two_tier_config 获取权重
+                  const twoTierConfig = templateConfig.scoring_rules.two_tier_config;
+                  const selfWeight = twoTierConfig.self_weight_in_employee_leader || 40;
+                  const leaderWeight = twoTierConfig.leader_weight_in_employee_leader || 60;
+                  
+                  currentEmployeeScore = Math.round(
+                    ((selfScore * selfWeight + leaderScore * leaderWeight) / 100) * 100
+                  ) / 100;
+                } else {
+                  // 传统模式：从 self_evaluation 和 leader_evaluation 获取权重
+                  const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.4;
+                  const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.6;
+                  
+                  currentEmployeeScore = Math.round(
+                    (selfScore * selfWeight + leaderScore * leaderWeight) * 100
+                  ) / 100;
+                }
+              }
+            } catch (error) {
+              console.warn(`计算团队成员${subordinate.id}的加权分数时出错:`, error);
+            }
+          }
+          
           teamMember.evaluation_status = {
             self_completed: participant.self_completed === 1,
             leader_completed: participant.leader_completed === 1,
@@ -267,6 +323,7 @@ export class UsersService {
             final_score: participant.final_score,
             self_score: participant.self_score,
             leader_score: participant.leader_score,
+            current_employee_score: currentEmployeeScore,
           };
 
           // 统计计数
@@ -581,6 +638,32 @@ export class UsersService {
         select: ['id', 'name'],
       });
 
+      // 获取老板评分信息
+      let bossEvaluation = null;
+      try {
+        const bossEval = await this.evaluationRepository.findOne({
+          where: {
+            assessment: { id: assessment.id },
+            evaluatee: { id: userId },
+            type: EvaluationType.BOSS,
+          },
+          relations: ['evaluator'],
+        });
+        
+        if (bossEval) {
+          bossEvaluation = {
+            completed: bossEval.status === 'submitted',
+            score: bossEval.score ? Math.round(parseFloat(bossEval.score.toString()) * 100) / 100 : undefined,
+            boss_id: bossEval.evaluator?.id,
+            boss_name: bossEval.evaluator?.name,
+            submitted_at: bossEval.status === 'submitted' ? bossEval.submitted_at : undefined,
+            last_updated: bossEval.updated_at,
+          };
+        }
+      } catch (error) {
+        console.warn(`获取老板评分信息失败 (assessment_id: ${assessment.id}, user_id: ${userId}):`, error);
+      }
+
       // 确定最终等级
       let finalLevel: string | undefined;
       if (participant.final_score) {
@@ -592,44 +675,71 @@ export class UsersService {
       }
 
       // 获取权重配置 - 优先使用考核的模板配置快照，然后是关联的模板配置
-      let weightConfig = { self_weight: 40, leader_weight: 60 }; // 默认权重
+      let weightConfig = { self_weight: 40, leader_weight: 60 }; // 默认权重（仅作为兜底）
+      let currentEmployeeScore: number | undefined; // 当前员工+领导加权分数（不包含老板评分）
       
       try {
+        let templateConfig = null;
+        
         // 优先使用考核的模板配置快照
         if (assessment.template_config) {
-          const templateConfig = typeof assessment.template_config === 'string' 
+          templateConfig = typeof assessment.template_config === 'string' 
             ? JSON.parse(assessment.template_config) 
             : assessment.template_config;
-          
-          if (templateConfig.scoring_rules) {
-            const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
-            const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
-            
-            weightConfig = {
-              self_weight: Math.round(selfWeight * 100),
-              leader_weight: Math.round(leaderWeight * 100),
-            };
-          }
         }
         // 如果没有模板配置快照，尝试从关联的模板获取
         else if (assessment.template?.config) {
-          const templateConfig = typeof assessment.template.config === 'string' 
+          templateConfig = typeof assessment.template.config === 'string' 
             ? JSON.parse(assessment.template.config) 
             : assessment.template.config;
+        }
+        
+        if (templateConfig?.scoring_rules) {
+          const scoringMode = templateConfig.scoring_rules.scoring_mode;
           
-          if (templateConfig.scoring_rules) {
-            const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.3;
-            const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.7;
+          if (scoringMode === 'two_tier_weighted' && templateConfig.scoring_rules.two_tier_config) {
+            // 两层加权模式：从 two_tier_config 获取权重
+            const twoTierConfig = templateConfig.scoring_rules.two_tier_config;
+            const selfWeight = twoTierConfig.self_weight_in_employee_leader || 40;
+            const leaderWeight = twoTierConfig.leader_weight_in_employee_leader || 60;
+            
+            weightConfig = {
+              self_weight: selfWeight,
+              leader_weight: leaderWeight,
+            };
+            
+            // 计算当前员工+领导的加权分数（不包含老板评分）
+            if (participant.self_score && participant.leader_score) {
+              const selfScore = parseFloat(participant.self_score.toString());
+              const leaderScore = parseFloat(participant.leader_score.toString());
+              currentEmployeeScore = Math.round(
+                ((selfScore * selfWeight + leaderScore * leaderWeight) / 100) * 100
+              ) / 100;
+            }
+          } else {
+            // 传统模式：从 self_evaluation 和 leader_evaluation 获取权重
+            const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.4;
+            const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.6;
             
             weightConfig = {
               self_weight: Math.round(selfWeight * 100),
               leader_weight: Math.round(leaderWeight * 100),
             };
+            
+            // 传统模式下，员工+领导的加权分数就是最终分数（如果没有老板评分）
+            if (participant.self_score && participant.leader_score) {
+              const selfScore = parseFloat(participant.self_score.toString());
+              const leaderScore = parseFloat(participant.leader_score.toString());
+              currentEmployeeScore = Math.round(
+                (selfScore * selfWeight + leaderScore * leaderWeight) * 100
+              ) / 100;
+            }
           }
         }
       } catch (error) {
         console.warn(`解析模板配置时出错 (assessment_id: ${assessment.id}):`, error);
-        // 使用默认权重配置
+        // 使用默认权重配置，并记录警告
+        console.warn(`使用默认权重配置: self_weight=40, leader_weight=60`);
       }
 
       const item: AssessmentHistoryItemDto = {
@@ -656,14 +766,44 @@ export class UsersService {
           submitted_at: participant.leader_submitted_at,
           last_updated: participant.leader_submitted_at,
         },
+        boss_evaluation: bossEvaluation,
         final_score: participant.final_score ? Math.round(parseFloat(participant.final_score.toString()) * 100) / 100 : undefined,
         final_level: finalLevel,
+        current_employee_score: currentEmployeeScore, // 当前员工+领导的加权分数（不包含老板评分）
         weight_config: weightConfig,
         is_overdue: isOverdue,
         days_to_deadline: daysDiff,
         template_id: assessment.template?.id || 1,
         template_name: assessment.template?.name || '标准绩效考核模板',
       };
+
+      // 根据完成阶段进行过滤
+      if (query.completion_stage) {
+        const selfCompleted = participant.self_completed === 1;
+        const leaderCompleted = participant.leader_completed === 1;
+        const bossCompleted = bossEvaluation?.completed || false;
+
+        switch (query.completion_stage) {
+          case 'self_only':
+            // 只完成自评，未完成领导评
+            if (!selfCompleted || leaderCompleted) {
+              continue;
+            }
+            break;
+          case 'self_leader':
+            // 完成自评和领导评，但未完成老板评（或不需要老板评）
+            if (!selfCompleted || !leaderCompleted || bossCompleted) {
+              continue;
+            }
+            break;
+          case 'all_completed':
+            // 自评、领导评、老板评全部完成（必须要求老板评分存在且完成）
+            if (!selfCompleted || !leaderCompleted || !bossEvaluation || !bossCompleted) {
+              continue;
+            }
+            break;
+        }
+      }
 
       items.push(item);
     }

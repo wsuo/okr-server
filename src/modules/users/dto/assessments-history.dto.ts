@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsOptional, IsString, IsNumber } from "class-validator";
+import { IsOptional, IsString, IsNumber, IsIn } from "class-validator";
 import { Transform } from "class-transformer";
 
 export class AssessmentsHistoryQueryDto {
@@ -39,6 +39,17 @@ export class AssessmentsHistoryQueryDto {
   @IsOptional()
   @IsString()
   sort?: string = "start_date_desc";
+
+  @ApiProperty({
+    description: "完成阶段过滤",
+    example: "self_leader",
+    enum: ["self_only", "self_leader", "all_completed"],
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(["self_only", "self_leader", "all_completed"])
+  completion_stage?: string;
 }
 
 export class EvaluationInfoDto {
@@ -100,11 +111,17 @@ export class AssessmentHistoryItemDto {
   @ApiProperty({ description: "领导评分信息", type: EvaluationInfoDto })
   leader_evaluation: EvaluationInfoDto;
 
+  @ApiProperty({ description: "老板评分信息", type: EvaluationInfoDto, required: false })
+  boss_evaluation?: EvaluationInfoDto;
+
   @ApiProperty({ description: "最终得分", example: 89.2, required: false })
   final_score?: number;
 
   @ApiProperty({ description: "最终等级", example: "优秀", required: false })
   final_level?: string;
+
+  @ApiProperty({ description: "当前员工和领导加权分数（不包含老板评分）", example: 85.5, required: false })
+  current_employee_score?: number;
 
   @ApiProperty({ description: "权重配置", type: WeightConfigDto })
   weight_config: WeightConfigDto;

@@ -58,8 +58,8 @@ export class EvaluationsController {
   @Get()
   @ApiOperation({ summary: "获取评估列表" })
   @ApiResponse({ status: 200, description: "获取成功" })
-  findAll(@Query() query: QueryEvaluationsDto) {
-    return this.evaluationsService.findAll(query);
+  findAll(@Query() query: QueryEvaluationsDto, @CurrentUser() user: any) {
+    return this.evaluationsService.findAll(query, user.id);
   }
 
   @Get("my")

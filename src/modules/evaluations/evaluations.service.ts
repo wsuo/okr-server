@@ -58,7 +58,7 @@ export class EvaluationsService {
     private dataSource: DataSource
   ) {}
 
-  async findAll(query: QueryEvaluationsDto) {
+  async findAll(query: QueryEvaluationsDto, currentUserId: number) {
     const {
       page = 1,
       limit = 10,
@@ -76,6 +76,14 @@ export class EvaluationsService {
       .leftJoinAndSelect("evaluation.evaluator", "evaluator")
       .leftJoinAndSelect("evaluation.evaluatee", "evaluatee")
       .leftJoinAndSelect("evaluatee.department", "department");
+
+    // 权限控制：用户只能看到与自己相关的评估记录
+    // 1. 自己作为被评估者的记录
+    // 2. 自己作为评估者的记录
+    queryBuilder.andWhere(
+      "(evaluation.evaluatee_id = :currentUserId OR evaluation.evaluator_id = :currentUserId)",
+      { currentUserId }
+    );
 
     if (assessment_id) {
       queryBuilder.andWhere("evaluation.assessment_id = :assessment_id", {
@@ -3089,6 +3097,18 @@ export class EvaluationsService {
     const tasks: EvaluationTaskDto[] = [];
     
     try {
+      // 首先检查用户是否有boss角色权限
+      const user = await this.usersRepository.findOne({
+        where: { id: userId },
+        relations: ['roles'],
+      });
+      
+      const hasBossRole = user?.roles?.some(role => role.code === 'boss');
+      if (!hasBossRole) {
+        // 如果没有boss角色，直接返回空数组
+        return tasks;
+      }
+      
       // 构建查询条件：查找启用两层加权模式的活跃考核
       const assessmentWhereCondition: any = {
         status: 'active',

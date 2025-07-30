@@ -2,28 +2,31 @@ import { ValueTransformer } from 'typeorm';
 
 /**
  * 时区转换器
- * 由于数据库连接已配置 timezone: "+08:00"，MySQL会自动处理时区转换
- * 此转换器现在只需要透传数据，避免双重转换
+ * 确保时间数据在存储和读取时保持东八区时区
  */
 export class TimezoneTransformer implements ValueTransformer {
   /**
    * 存储到数据库时的转换（应用时间 -> 数据库时间）
-   * @param value 应用中的时间值
-   * @returns 存储到数据库的时间值
    */
   to(value: Date): Date {
-    // 数据库连接已配置时区，直接透传
+    if (!value) return value;
     return value;
   }
 
   /**
    * 从数据库读取时的转换（数据库时间 -> 应用时间）
-   * @param value 数据库中的时间值
-   * @returns 应用中使用的时间值
+   * 数据库存储的是东八区时间，需要构造正确的时区时间
    */
   from(value: Date): Date {
-    // 数据库连接已配置时区，直接透传
-    return value;
+    if (!value) return value;
+    
+    // 数据库中的时间已经是东八区时间，但被当作UTC处理了
+    // 需要添加8小时的偏移来得到正确的东八区时间
+    const date = new Date(value);
+    const offsetHours = 8;
+    const correctedDate = new Date(date.getTime() + (offsetHours * 60 * 60 * 1000));
+    
+    return correctedDate;
   }
 }
 

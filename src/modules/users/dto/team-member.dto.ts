@@ -41,6 +41,9 @@ export class EvaluationStatusDto {
 
   @ApiProperty({ description: "领导评分", example: 90, required: false })
   leader_score?: number;
+
+  @ApiProperty({ description: "当前员工和领导加权分数（不包含老板评分）", example: 87.2, required: false })
+  current_employee_score?: number;
 }
 
 export class TeamMemberDto {

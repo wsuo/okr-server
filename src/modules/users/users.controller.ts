@@ -112,6 +112,21 @@ export class UsersController {
     return this.usersService.getEvaluationStats(+userId, query);
   }
 
+  @ApiOperation({ summary: "获取当前用户考核历史" })
+  @ApiResponse({
+    status: 200,
+    description: "获取成功",
+    type: AssessmentsHistoryResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @Get("me/assessments-history")
+  getMyAssessmentsHistory(
+    @Request() req,
+    @Query() query: AssessmentsHistoryQueryDto
+  ) {
+    return this.usersService.getAssessmentsHistory(req.user.id, query);
+  }
+
   @ApiOperation({ summary: "获取员工考核历史" })
   @ApiResponse({
     status: 200,
