@@ -137,6 +137,12 @@ export class AssessmentHistoryItemDto {
 
   @ApiProperty({ description: "模板名称", example: "标准绩效考核模板" })
   template_name: string;
+
+  @ApiProperty({
+    description: "该员工是否已完成本次考核所需的全部评分（基于模板配置，若开启且权重大于0则包含老板评分）",
+    example: true,
+  })
+  participant_completed: boolean;
 }
 
 export class AssessmentHistorySummaryDto {

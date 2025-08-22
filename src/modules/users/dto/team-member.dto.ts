@@ -27,11 +27,17 @@ export class EvaluationStatusDto {
   @ApiProperty({ description: "领导评分是否完成", example: false })
   leader_completed: boolean;
 
+  @ApiProperty({ description: "老板评分是否完成", example: false, required: false })
+  boss_completed?: boolean;
+
   @ApiProperty({ description: "自评完成时间", example: "2024-01-15T10:30:00Z", required: false })
   self_completed_at?: Date;
 
   @ApiProperty({ description: "领导评分完成时间", example: "2024-01-20T14:20:00Z", required: false })
   leader_completed_at?: Date;
+
+  @ApiProperty({ description: "老板评分完成时间", example: "2024-01-22T09:00:00Z", required: false })
+  boss_completed_at?: Date;
 
   @ApiProperty({ description: "最终得分", example: 88.5, required: false })
   final_score?: number;
@@ -41,6 +47,9 @@ export class EvaluationStatusDto {
 
   @ApiProperty({ description: "领导评分", example: 90, required: false })
   leader_score?: number;
+
+  @ApiProperty({ description: "老板评分", example: 92, required: false })
+  boss_score?: number;
 
   @ApiProperty({ description: "当前员工和领导加权分数（不包含老板评分）", example: 87.2, required: false })
   current_employee_score?: number;
