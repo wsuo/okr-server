@@ -149,8 +149,11 @@ export class AssessmentsService {
       leader_completed_count: participants.filter(
         (p) => p.leader_completed === 1
       ).length,
+      boss_completed_count: participants.filter(
+        (p) => p.boss_completed === 1
+      ).length,
       fully_completed_count: participants.filter(
-        (p) => p.self_completed === 1 && p.leader_completed === 1
+        (p) => p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
       ).length,
       average_score: 0,
       highest_score: 0,
@@ -226,9 +229,14 @@ export class AssessmentsService {
         id: p.id,
         self_completed: p.self_completed,
         leader_completed: p.leader_completed,
+        boss_completed: p.boss_completed,
         self_score: p.self_score,
         leader_score: p.leader_score,
+        boss_score: p.boss_score,
         final_score: p.final_score,
+        self_submitted_at: p.self_submitted_at,
+        leader_submitted_at: p.leader_submitted_at,
+        boss_submitted_at: p.boss_submitted_at,
         user: {
           id: p.user.id,
           name: p.user.name,
