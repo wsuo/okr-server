@@ -448,6 +448,11 @@ export class StatisticsService {
           "leader_eval",
           "leader_eval.assessment_id = assessment.id AND leader_eval.evaluatee_id = user.id AND leader_eval.type = 'leader' AND leader_eval.status = 'submitted'"
         )
+        .leftJoin(
+          "evaluations",
+          "boss_eval",
+          "boss_eval.assessment_id = assessment.id AND boss_eval.evaluatee_id = user.id AND boss_eval.type = 'boss' AND boss_eval.status = 'submitted'"
+        )
         .select([
           "participant.id as participant_id",
           "participant.self_completed",
@@ -471,6 +476,8 @@ export class StatisticsService {
           "self_eval.submitted_at as self_evaluation_submitted_at",
           "leader_eval.score as actual_leader_score",
           "leader_eval.submitted_at as leader_evaluation_submitted_at",
+          "boss_eval.score as actual_boss_score",
+          "boss_eval.submitted_at as boss_evaluation_submitted_at",
         ])
         .where("participant.deleted_at IS NULL")
         .andWhere("user.deleted_at IS NULL")
@@ -502,7 +509,8 @@ export class StatisticsService {
         const userId = result.user_id;
         const hasSelfEval = result.actual_self_score !== null;
         const hasLeaderEval = result.actual_leader_score !== null;
-        const hasAnyEval = hasSelfEval || hasLeaderEval;
+        const hasBossEval = result.actual_boss_score !== null;
+        const hasAnyEval = hasSelfEval || hasLeaderEval || hasBossEval;
 
         if (!userLatestAssessments.has(userId)) {
           // First record for this user
@@ -511,7 +519,8 @@ export class StatisticsService {
           const existing = userLatestAssessments.get(userId);
           const existingHasSelfEval = existing.actual_self_score !== null;
           const existingHasLeaderEval = existing.actual_leader_score !== null;
-          const existingHasAnyEval = existingHasSelfEval || existingHasLeaderEval;
+          const existingHasBossEval = existing.actual_boss_score !== null;
+          const existingHasAnyEval = existingHasSelfEval || existingHasLeaderEval || existingHasBossEval;
 
           // Replace if:
           // 1. Current record has evaluation data and existing doesn't, OR
@@ -533,6 +542,7 @@ export class StatisticsService {
       const transformedResult = Array.from(userLatestAssessments.values()).map(item => {
         const selfScore = parseFloat(item.actual_self_score) || 0;
         const leaderScore = parseFloat(item.actual_leader_score) || 0;
+        const bossScore = parseFloat(item.actual_boss_score) || 0;
         const finalScore = parseFloat(item.participant_final_score) || 0;
 
         return {
@@ -554,13 +564,16 @@ export class StatisticsService {
           scores: {
             self_score: selfScore,
             leader_score: leaderScore,
+            boss_score: bossScore,
             final_score: finalScore,
           },
           completion: {
             self_completed: item.actual_self_score !== null,
             leader_completed: item.actual_leader_score !== null,
+            boss_completed: item.actual_boss_score !== null,
             self_submitted_at: item.self_evaluation_submitted_at || item.self_submitted_at,
             leader_submitted_at: item.leader_evaluation_submitted_at || item.leader_submitted_at,
+            boss_submitted_at: item.boss_evaluation_submitted_at,
           },
         };
       });
