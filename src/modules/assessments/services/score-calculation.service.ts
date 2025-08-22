@@ -259,14 +259,35 @@ export class ScoreCalculationService {
       throw new BadRequestException("模板配置缺少评估类别");
     }
 
-    // 验证评估者权重总和为1
-    const selfWeight =
-      config.scoring_rules.self_evaluation?.weight_in_final || 0;
-    const leaderWeight =
-      config.scoring_rules.leader_evaluation?.weight_in_final || 0;
+    // 根据评分模式验证权重
+    if (config.scoring_rules.scoring_mode === 'two_tier_weighted' && config.scoring_rules.two_tier_config) {
+      // 两层加权模式验证
+      const twoTierConfig = config.scoring_rules.two_tier_config;
+      const bossWeight = twoTierConfig.boss_weight || 0;
+      const employeeLeaderWeight = twoTierConfig.employee_leader_weight || 0;
+      
+      // 验证第一层权重总和
+      if (Math.abs(bossWeight + employeeLeaderWeight - 100) > 0.01) {
+        throw new BadRequestException("老板评分权重和员工领导评分权重总和必须为100");
+      }
+      
+      // 验证第二层权重总和
+      const selfWeightInEL = twoTierConfig.self_weight_in_employee_leader || 0;
+      const leaderWeightInEL = twoTierConfig.leader_weight_in_employee_leader || 0;
+      
+      if (Math.abs(selfWeightInEL + leaderWeightInEL - 100) > 0.01) {
+        throw new BadRequestException("员工领导层内的自评和领导评分权重总和必须为100");
+      }
+    } else {
+      // 传统模式验证评估者权重总和为1
+      const selfWeight =
+        config.scoring_rules.self_evaluation?.weight_in_final || 0;
+      const leaderWeight =
+        config.scoring_rules.leader_evaluation?.weight_in_final || 0;
 
-    if (Math.abs(selfWeight + leaderWeight - 1) > 0.01) {
-      throw new BadRequestException("评估者权重总和必须为1");
+      if (Math.abs(selfWeight + leaderWeight - 1) > 0.01) {
+        throw new BadRequestException("评估者权重总和必须为1");
+      }
     }
 
     // 验证类别权重总和为100
