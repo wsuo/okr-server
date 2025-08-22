@@ -318,11 +318,14 @@ export class UsersService {
           teamMember.evaluation_status = {
             self_completed: participant.self_completed === 1,
             leader_completed: participant.leader_completed === 1,
+            boss_completed: participant.boss_completed === 1,
             self_completed_at: participant.self_submitted_at,
             leader_completed_at: participant.leader_submitted_at,
+            boss_completed_at: participant.boss_submitted_at,
             final_score: participant.final_score,
             self_score: participant.self_score,
             leader_score: participant.leader_score,
+            boss_score: participant.boss_score,
             current_employee_score: currentEmployeeScore,
           };
 
@@ -677,6 +680,7 @@ export class UsersService {
       // 获取权重配置 - 优先使用考核的模板配置快照，然后是关联的模板配置
       let weightConfig = { self_weight: 40, leader_weight: 60 }; // 默认权重（仅作为兜底）
       let currentEmployeeScore: number | undefined; // 当前员工+领导加权分数（不包含老板评分）
+      let bossRequired = false; // 是否需要老板评分（由模板配置与权重决定）
       
       try {
         let templateConfig = null;
@@ -702,6 +706,8 @@ export class UsersService {
             const twoTierConfig = templateConfig.scoring_rules.two_tier_config;
             const selfWeight = twoTierConfig.self_weight_in_employee_leader || 40;
             const leaderWeight = twoTierConfig.leader_weight_in_employee_leader || 60;
+            const bossWeight = twoTierConfig.boss_weight || 0;
+            bossRequired = bossWeight > 0; // 两层模式下，boss权重大于0则视为必需
             
             weightConfig = {
               self_weight: selfWeight,
@@ -720,6 +726,9 @@ export class UsersService {
             // 传统模式：从 self_evaluation 和 leader_evaluation 获取权重
             const selfWeight = templateConfig.scoring_rules.self_evaluation?.weight_in_final || 0.4;
             const leaderWeight = templateConfig.scoring_rules.leader_evaluation?.weight_in_final || 0.6;
+            const bossWeight = templateConfig.scoring_rules.boss_evaluation?.weight_in_final || 0;
+            const bossEnabled = templateConfig.scoring_rules.boss_evaluation?.enabled !== false;
+            bossRequired = bossEnabled && bossWeight > 0;
             
             weightConfig = {
               self_weight: Math.round(selfWeight * 100),
@@ -775,6 +784,10 @@ export class UsersService {
         days_to_deadline: daysDiff,
         template_id: assessment.template?.id || 1,
         template_name: assessment.template?.name || '标准绩效考核模板',
+        participant_completed:
+          (participant.self_completed === 1) &&
+          (participant.leader_completed === 1) &&
+          (!bossRequired || (bossEvaluation?.completed || false)),
       };
 
       // 根据完成阶段进行过滤
