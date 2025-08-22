@@ -62,3 +62,9 @@ temp/
 
 # Process management configuration (environment-specific)
 ecosystem.config.js
+
+# Claude Code related files
+CLAUDE.md
+CODEX.md
+docs/
+.claude/
