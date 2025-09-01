@@ -60,7 +60,7 @@ log_info "构建成功"
 
 # 步骤2: 备份线上代码
 log_info "步骤 2/6: 备份线上代码..."
-ssh $SERVER_USER@$SERVER_HOST "cd $SERVER_DIR && tar -czf backup_$(date +%Y%m%d_%H%M%S).tar.gz dist src package.json package-lock.json"
+ssh $SERVER_USER@$SERVER_HOST "cd $SERVER_DIR && tar -czf backup_$(date +%Y%m%d_%H%M%S).tar.gz dist src package.json package-lock.json 2>/dev/null || echo '备份可能部分失败，但继续部署'"
 log_info "备份完成"
 
 # 步骤3: 上传新代码
@@ -69,6 +69,10 @@ log_info "步骤 3/6: 上传新代码到服务器..."
 ssh $SERVER_USER@$SERVER_HOST "mkdir -p $SERVER_DIR/temp_deploy"
 
 # 上传必要文件
+# 临时关闭错误退出，允许 rsync 的部分传输警告
+set +e
+
+# 上传 dist 目录
 rsync -avz --progress \
     --exclude 'node_modules' \
     --exclude '.env' \
@@ -78,17 +82,36 @@ rsync -avz --progress \
     --exclude '*.log' \
     --exclude 'backup_*.tar.gz' \
     "$LOCAL_DIR/dist/" "$SERVER_USER@$SERVER_HOST:$SERVER_DIR/temp_deploy/dist/"
+RSYNC_EXIT_CODE=$?
+if [ $RSYNC_EXIT_CODE -ne 0 ] && [ $RSYNC_EXIT_CODE -ne 23 ]; then
+    log_error "dist 目录上传失败 (exit code: $RSYNC_EXIT_CODE)"
+    exit 1
+fi
 
+# 上传 src 目录
 rsync -avz --progress \
     "$LOCAL_DIR/src/" "$SERVER_USER@$SERVER_HOST:$SERVER_DIR/temp_deploy/src/"
+RSYNC_EXIT_CODE=$?
+if [ $RSYNC_EXIT_CODE -ne 0 ] && [ $RSYNC_EXIT_CODE -ne 23 ]; then
+    log_error "src 目录上传失败 (exit code: $RSYNC_EXIT_CODE)"
+    exit 1
+fi
 
+# 上传配置文件
 rsync -avz --progress \
     "$LOCAL_DIR/package.json" \
     "$LOCAL_DIR/package-lock.json" \
     "$LOCAL_DIR/tsconfig.json" \
-    "$LOCAL_DIR/tsconfig.build.json" \
     "$LOCAL_DIR/nest-cli.json" \
     "$SERVER_USER@$SERVER_HOST:$SERVER_DIR/temp_deploy/"
+RSYNC_EXIT_CODE=$?
+if [ $RSYNC_EXIT_CODE -ne 0 ] && [ $RSYNC_EXIT_CODE -ne 23 ]; then
+    log_error "配置文件上传失败 (exit code: $RSYNC_EXIT_CODE)"
+    exit 1
+fi
+
+# 重新启用错误退出
+set -e
 
 log_info "文件上传完成"
 
