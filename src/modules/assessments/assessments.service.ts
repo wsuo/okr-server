@@ -74,6 +74,7 @@ export class AssessmentsService {
 
     queryBuilder
       .groupBy("assessment.id")
+      .addGroupBy("assessment.created_at")
       .orderBy("assessment.created_at", "DESC")
       .skip(skip)
       .take(limit);
