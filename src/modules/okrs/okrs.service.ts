@@ -199,7 +199,8 @@ export class OkrsService {
       updateOkrDto.progress = weightedProgress;
     }
 
-    await this.okrsRepository.update(id, updateOkrDto);
+    Object.assign(okr, updateOkrDto);
+    await this.okrsRepository.save(okr);
     return this.findOne(id);
   }
 
@@ -228,7 +229,8 @@ export class OkrsService {
       throw new NotFoundException("关键结果不存在");
     }
 
-    await this.keyResultsRepository.update(keyResultId, updateKeyResultDto);
+    Object.assign(keyResult, updateKeyResultDto);
+    await this.keyResultsRepository.save(keyResult);
 
     // 更新关键结果后，重新计算OKR的整体进度
     await this.recalculateOkrProgress(okrId);
@@ -249,7 +251,11 @@ export class OkrsService {
       weightedProgress += (kr.progress * kr.weight) / 100;
     }
 
-    await this.okrsRepository.update(okrId, { progress: weightedProgress });
+    const okr = await this.okrsRepository.findOne({ where: { id: okrId } });
+    if (okr) {
+      okr.progress = weightedProgress;
+      await this.okrsRepository.save(okr);
+    }
   }
 
   async getMyOkrs(userId: number, assessmentId?: number) {
