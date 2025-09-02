@@ -219,4 +219,31 @@ export class UsersController {
   toggleStatus(@Param("id") id: string) {
     return this.usersService.toggleStatus(+id);
   }
+
+  @ApiOperation({ summary: "清理已删除用户数据" })
+  @ApiResponse({
+    status: 200,
+    description: "清理完成",
+    schema: {
+      type: "object",
+      properties: {
+        code: { type: "number", example: 200 },
+        message: { type: "string", example: "success" },
+        data: {
+          type: "object",
+          properties: {
+            cleaned: { type: "number", example: 5 }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 401, description: "未授权" })
+  @ApiResponse({ status: 403, description: "无权限" })
+  @Roles("admin")
+  @UseGuards(RolesGuard)
+  @Post("cleanup-deleted")
+  cleanupDeletedUsers() {
+    return this.usersService.cleanupDeletedUsersData();
+  }
 }
