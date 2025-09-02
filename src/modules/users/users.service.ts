@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, Like } from "typeorm";
+import { Repository, Like, In, Not } from "typeorm";
 
 import { User } from "../../entities/user.entity";
 import { Role } from "../../entities/role.entity";
@@ -55,7 +55,10 @@ export class UsersService {
     // 检查邮箱是否已存在
     if (createUserDto.email) {
       const existingEmail = await this.usersRepository.findOne({
-        where: { email: createUserDto.email },
+        where: { 
+          email: createUserDto.email,
+          deleted_at: null
+        },
       });
       if (existingEmail) {
         throw new ConflictException("邮箱已存在");
@@ -66,7 +69,9 @@ export class UsersService {
     const hashedPassword = await BcryptUtil.hash(createUserDto.password);
 
     // 获取角色
-    const roles = await this.rolesRepository.findByIds(createUserDto.role_ids);
+    const roles = await this.rolesRepository.findBy({
+      id: In(createUserDto.role_ids)
+    });
 
     // 创建用户
     const user = this.usersRepository.create({
@@ -134,33 +139,167 @@ export class UsersService {
     // 检查邮箱是否已存在
     if (updateUserDto.email && updateUserDto.email !== user.email) {
       const existingEmail = await this.usersRepository.findOne({
-        where: { email: updateUserDto.email },
+        where: { 
+          email: updateUserDto.email,
+          deleted_at: null
+        },
       });
       if (existingEmail) {
         throw new ConflictException("邮箱已存在");
       }
     }
 
-    // 更新角色
-    if (updateUserDto.role_ids) {
-      const roles = await this.rolesRepository.findByIds(
-        updateUserDto.role_ids
-      );
-      user.roles = roles;
+    // 使用原生 SQL 直接更新数据库，绕过 TypeORM 缓存
+    const { role_ids, ...userFields } = updateUserDto;
+    
+    // 使用原生 SQL 直接更新数据库，绕过 TypeORM 缓存
+    if (Object.keys(userFields).length > 0) {
+      const setClause = Object.keys(userFields)
+        .map(key => `${key} = ?`)
+        .join(', ');
+      const values = Object.values(userFields);
+      
+      const updateSql = `UPDATE users SET ${setClause} WHERE id = ? AND deleted_at IS NULL`;
+      
+      const updateResult = await this.usersRepository.manager.query(updateSql, [...values, id]);
     }
+    
+    // 如果有角色更新，单独处理关联关系
+    if (role_ids) {
+      // 先删除旧的角色关联
+      await this.usersRepository.manager.query('DELETE FROM user_roles WHERE user_id = ?', [id]);
+      
+      // 插入新的角色关联
+      for (const roleId of role_ids) {
+        await this.usersRepository.manager.query(
+          'INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', 
+          [id, roleId]
+        );
+      }
+    }
+    
+    // 使用原生 SQL 查询最新数据，完全绕过 TypeORM 缓存
+    const rawUsers = await this.usersRepository.manager.query(`
+      SELECT 
+        u.id, u.username, u.name, u.email, u.phone, u.position, 
+        u.department_id, u.leader_id, u.join_date, u.status,
+        u.created_at, u.updated_at,
+        d.name as department_name,
+        l.name as leader_name
+      FROM users u
+      LEFT JOIN departments d ON u.department_id = d.id AND d.deleted_at IS NULL
+      LEFT JOIN users l ON u.leader_id = l.id AND l.deleted_at IS NULL
+      WHERE u.id = ? AND u.deleted_at IS NULL
+    `, [id]);
+    
+    if (!rawUsers || rawUsers.length === 0) {
+      throw new NotFoundException("用户不存在");
+    }
+    
+    const rawUser = rawUsers[0];
+    
+    // 获取角色信息
+    const roles = await this.usersRepository.manager.query(`
+      SELECT r.id, r.name, r.description
+      FROM roles r
+      INNER JOIN user_roles ur ON r.id = ur.role_id
+      WHERE ur.user_id = ?
+    `, [id]);
+    
+    
+    // 构造返回对象
+    const result = {
+      id: rawUser.id,
+      username: rawUser.username,
+      name: rawUser.name,
+      email: rawUser.email,
+      phone: rawUser.phone,
+      position: rawUser.position,
+      department_id: rawUser.department_id,
+      leader_id: rawUser.leader_id,
+      join_date: rawUser.join_date,
+      status: rawUser.status,
+      created_at: rawUser.created_at,
+      updated_at: rawUser.updated_at,
+      department: rawUser.department_id ? {
+        id: rawUser.department_id,
+        name: rawUser.department_name
+      } : null,
+      leader: rawUser.leader_id ? {
+        id: rawUser.leader_id,
+        name: rawUser.leader_name
+      } : null,
+      roles: roles,
+      subordinates: [] // 为性能考虑，暂不查询下属
+    };
 
-    Object.assign(user, updateUserDto);
-    return this.usersRepository.save(user);
+    return result as User;
   }
 
   async remove(id: number): Promise<void> {
     const user = await this.findOne(id);
+    
+    // 软删除前清空唯一字段，避免唯一索引冲突
+    const updateData: Partial<User> = {};
+    if (user.email) {
+      updateData.email = null;
+    }
+    if (user.username) {
+      updateData.username = `deleted_${user.username}_${Date.now()}`;
+    }
+    
+    if (Object.keys(updateData).length > 0) {
+      Object.assign(user, updateData);
+      await this.usersRepository.save(user);
+    }
+    
     await this.usersRepository.softDelete(id);
+  }
+
+  /**
+   * 清理已删除用户的唯一字段数据
+   * 避免邮箱和用户名冲突问题
+   */
+  async cleanupDeletedUsersData(): Promise<{ cleaned: number }> {
+    // 查找所有已删除但唯一字段未清空的用户
+    const deletedUsers = await this.usersRepository.find({
+      where: [
+        { deleted_at: Not(null), email: Not(null) },
+        { deleted_at: Not(null) }
+      ],
+      withDeleted: true
+    });
+
+    let cleanedCount = 0;
+    
+    for (const user of deletedUsers) {
+      const updateData: Partial<User> = {};
+      
+      if (user.email) {
+        updateData.email = null;
+        cleanedCount++;
+      }
+      
+      if (user.username && !user.username.startsWith('deleted_')) {
+        updateData.username = `deleted_${user.username}_${Date.now()}_${user.id}`;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        Object.assign(user, updateData);
+        await this.usersRepository.save(user);
+      }
+    }
+
+    return { cleaned: cleanedCount };
   }
 
   async resetPassword(id: number, newPassword: string): Promise<void> {
     const hashedPassword = await BcryptUtil.hash(newPassword);
-    await this.usersRepository.update(id, { password: hashedPassword });
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (user) {
+      user.password = hashedPassword;
+      await this.usersRepository.save(user);
+    }
   }
 
   async toggleStatus(id: number): Promise<User> {
