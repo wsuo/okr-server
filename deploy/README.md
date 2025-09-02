@@ -45,7 +45,7 @@ cd deploy
 6. 重启 PM2 应用
 7. 执行健康检查
 
-### 2. deploy-quick.sh - 快速部署脚本
+### 2. quick-deploy.sh - 快速部署脚本
 
 **功能**：仅更新构建后的代码（dist 目录）并重启应用。
 
@@ -57,7 +57,7 @@ cd deploy
 **执行方式**：
 ```bash
 cd deploy
-./deploy-quick.sh
+./quick-deploy.sh
 ```
 
 **执行步骤**：

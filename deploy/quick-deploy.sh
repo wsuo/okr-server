@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OKR 系统快速部署脚本（无需确认）
-# 使用方法: ./deploy-quick.sh
+# 使用方法: ./quick-deploy.sh
 
 set -e
 
