@@ -7,6 +7,7 @@ import { AssessmentParticipant } from "../../entities/assessment-participant.ent
 import { Evaluation } from "../../entities/evaluation.entity";
 import { Okr } from "../../entities/okr.entity";
 import { Department } from "../../entities/department.entity";
+import { Template } from "../../entities/template.entity";
 import { EvaluationStatus } from "../../common/enums/evaluation.enum";
 import { StatisticsQueryDto } from "./dto/statistics-query.dto";
 
@@ -27,6 +28,8 @@ export class StatisticsService {
     private okrsRepository: Repository<Okr>,
     @InjectRepository(Department)
     private departmentsRepository: Repository<Department>,
+    @InjectRepository(Template)
+    private templatesRepository: Repository<Template>,
     private dataSource: DataSource
   ) {}
 
@@ -39,6 +42,7 @@ export class StatisticsService {
         activeAssessments,
         completedAssessments,
         totalEvaluations,
+        totalTemplates,
         averageScores,
         departmentStats,
         recentAssessments,
@@ -48,6 +52,7 @@ export class StatisticsService {
         this.assessmentsRepository.count({ where: { status: "active" } }),
         this.assessmentsRepository.count({ where: { status: "completed" } }),
         this.evaluationsRepository.count({ where: { status: EvaluationStatus.SUBMITTED } }),
+        this.templatesRepository.count({ where: { deleted_at: null } as any }),
         this.getAverageScores(),
         this.getDepartmentStatistics(),
         this.getRecentAssessments(),
@@ -68,6 +73,7 @@ export class StatisticsService {
           active_assessments: activeAssessments,
           completed_assessments: completedAssessments,
           total_evaluations: totalEvaluations,
+          total_templates: totalTemplates,
           completion_rate: Number(completionRate.toFixed(1)),
           average_score: averageScores.overall,
           self_average: averageScores.self,

@@ -7,6 +7,7 @@ import { AssessmentParticipant } from "../../entities/assessment-participant.ent
 import { Evaluation } from "../../entities/evaluation.entity";
 import { Okr } from "../../entities/okr.entity";
 import { Department } from "../../entities/department.entity";
+import { Template } from "../../entities/template.entity";
 import { StatisticsController } from "./statistics.controller";
 import { StatisticsService } from "./statistics.service";
 
@@ -19,6 +20,7 @@ import { StatisticsService } from "./statistics.service";
       Evaluation,
       Okr,
       Department,
+      Template,
     ]),
   ],
   controllers: [StatisticsController],
