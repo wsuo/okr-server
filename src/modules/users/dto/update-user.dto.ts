@@ -7,6 +7,8 @@ import {
   IsNumber,
   IsArray,
   IsDateString,
+  IsEmail,
+  Matches,
 } from "class-validator";
 
 export class UpdateUserDto {
@@ -21,13 +23,15 @@ export class UpdateUserDto {
     example: "zhangsan@example.com",
     required: false,
   })
-  @IsString()
   @IsOptional()
+  @IsString()
+  @IsEmail({}, { message: "邮箱格式不正确" })
   email?: string;
 
   @ApiProperty({ description: "电话", example: "13800138000", required: false })
-  @IsString()
   @IsOptional()
+  @IsString()
+  @Matches(/^1[3-9]\d{9}$/, { message: "手机号格式不正确" })
   phone?: string;
 
   @ApiProperty({ description: "职位", example: "前端工程师", required: false })
@@ -55,7 +59,7 @@ export class UpdateUserDto {
     example: "2023-03-15",
     required: false,
   })
-  @IsDateString()
   @IsOptional()
+  @IsDateString({}, { message: "入职日期格式不正确，请使用 YYYY-MM-DD 格式" })
   join_date?: string;
 }

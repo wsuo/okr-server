@@ -35,13 +35,13 @@ export class CreateUserDto {
     example: "zhangsan@example.com",
     required: false,
   })
-  @IsEmail()
   @IsOptional()
+  @IsEmail({}, { message: "邮箱格式不正确" })
   email?: string;
 
   @ApiProperty({ description: "电话", example: "13800138000", required: false })
-  @IsString()
   @IsOptional()
+  @IsString()
   @Matches(/^1[3-9]\d{9}$/, { message: "手机号格式不正确" })
   phone?: string;
 
@@ -70,7 +70,7 @@ export class CreateUserDto {
     example: "2023-03-15",
     required: false,
   })
-  @IsDateString()
   @IsOptional()
+  @IsDateString({}, { message: "入职日期格式不正确，请使用 YYYY-MM-DD 格式" })
   join_date?: string;
 }
