@@ -434,7 +434,8 @@ export class AssessmentsService {
       );
     }
 
-    await this.assessmentsRepository.update(id, updateAssessmentDto);
+    Object.assign(assessment, updateAssessmentDto);
+    await this.assessmentsRepository.save(assessment);
     return this.findOne(id);
   }
 
@@ -622,7 +623,11 @@ export class AssessmentsService {
       // 从editData中移除不属于实体的字段，避免TypeORM处理不认识的字段
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { participant_ids, ...updateData } = editData;
-      await this.assessmentsRepository.update(id, updateData);
+      const assessmentToUpdate = await this.assessmentsRepository.findOne({ where: { id } });
+      if (assessmentToUpdate) {
+        Object.assign(assessmentToUpdate, updateData);
+        await this.assessmentsRepository.save(assessmentToUpdate);
+      }
     }
 
     return this.findOne(id, currentUserId);
@@ -709,10 +714,9 @@ export class AssessmentsService {
     }
 
     // 创建模板配置快照并更新状态为active
-    await this.assessmentsRepository.update(id, {
-      status: "active",
-      template_config: fullAssessment.template.config,
-    });
+    fullAssessment.status = "active";
+    fullAssessment.template_config = fullAssessment.template.config;
+    await this.assessmentsRepository.save(fullAssessment);
 
     return this.findOne(id, currentUserId);
   }
@@ -773,7 +777,11 @@ export class AssessmentsService {
       await this.syncOkrStatusAndRatings(id, scoreResults, queryRunner);
 
       // 更新考核状态
-      await queryRunner.manager.update(Assessment, id, { status: "completed" });
+      const assessToUpdate = await queryRunner.manager.findOne(Assessment, { where: { id } });
+      if (assessToUpdate) {
+        assessToUpdate.status = "completed";
+        await queryRunner.manager.save(Assessment, assessToUpdate);
+      }
 
       await queryRunner.commitTransaction();
       return this.findOne(id);
@@ -1084,10 +1092,9 @@ export class AssessmentsService {
     this.validateStatusTransition(assessment.status, "completed");
 
     // 更新考核状态为已完成
-    await this.assessmentsRepository.update(id, {
-      status: "completed",
-      updated_at: new Date(),
-    });
+    assessment.status = "completed";
+    assessment.updated_at = new Date();
+    await this.assessmentsRepository.save(assessment);
 
     // 获取参与者统计信息
     const participants = await this.participantsRepository.find({
