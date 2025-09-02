@@ -110,7 +110,8 @@ export class AuthService {
     const hashedNewPassword = await BcryptUtil.hash(
       changePasswordDto.newPassword
     );
-    await this.usersRepository.update(userId, { password: hashedNewPassword });
+    user.password = hashedNewPassword;
+    await this.usersRepository.save(user);
 
     return { message: "密码修改成功" };
   }

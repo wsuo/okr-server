@@ -186,10 +186,13 @@ export class TemplatesService {
         );
       }
 
-      await this.templatesRepository.update(id, {
-        ...updateTemplateDto,
-        is_default: updateTemplateDto.is_default ? 1 : 0,
-      });
+      const assignData: any = { ...updateTemplateDto };
+      if (updateTemplateDto.is_default !== undefined) {
+        assignData.is_default = updateTemplateDto.is_default ? 1 : 0;
+      }
+
+      Object.assign(template, assignData);
+      await this.templatesRepository.save(template);
 
       await queryRunner.commitTransaction();
       return this.findOne(id);
@@ -298,7 +301,8 @@ export class TemplatesService {
       );
 
       // 设置当前模板为默认
-      await this.templatesRepository.update(id, { is_default: 1 });
+      template.is_default = 1;
+      await this.templatesRepository.save(template);
 
       await queryRunner.commitTransaction();
       return this.findOne(id);
