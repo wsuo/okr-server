@@ -207,11 +207,12 @@ export class EvaluationsService {
           throw new BadRequestException("已提交过自评，无法重复提交");
         }
         // 更新现有的草稿
-        await this.evaluationsRepository.update(existingEvaluation.id, {
+        Object.assign(existingEvaluation, {
           ...createSelfEvaluationDto,
           status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
+        await this.evaluationsRepository.save(existingEvaluation);
 
         // 更新参与者状态
         await queryRunner.manager.update(AssessmentParticipant, participant.id, {
@@ -321,11 +322,12 @@ export class EvaluationsService {
           throw new BadRequestException("已提交过对该员工的评分，无法重复提交");
         }
         // 更新现有的草稿
-        await this.evaluationsRepository.update(existingEvaluation.id, {
+        Object.assign(existingEvaluation, {
           ...createLeaderEvaluationDto,
           status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
+        await this.evaluationsRepository.save(existingEvaluation);
 
         // 更新参与者状态
         await queryRunner.manager.update(AssessmentParticipant, participant.id, {
@@ -456,11 +458,12 @@ export class EvaluationsService {
         }
 
         // 更新现有评分
-        await queryRunner.manager.update(Evaluation, existingEvaluation.id, {
+        Object.assign(existingEvaluation, {
           ...createBossEvaluationDto,
           status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
+        await queryRunner.manager.save(Evaluation, existingEvaluation);
 
         // 更新参与者的上级评分状态
         await queryRunner.manager.update(AssessmentParticipant, participant.id, {
@@ -520,7 +523,8 @@ export class EvaluationsService {
       throw new BadRequestException("已提交的评估无法修改");
     }
 
-    await this.evaluationsRepository.update(id, updateEvaluationDto);
+    Object.assign(evaluation, updateEvaluationDto);
+    await this.evaluationsRepository.save(evaluation);
     return this.findOne(id);
   }
 
@@ -851,12 +855,8 @@ export class EvaluationsService {
       let savedEvaluation;
       if (existingEvaluation) {
         // 更新现有记录
-        await queryRunner.manager.update(
-          Evaluation,
-          existingEvaluation.id,
-          evaluationData
-        );
-        savedEvaluation = { ...existingEvaluation, id: existingEvaluation.id };
+        Object.assign(existingEvaluation, evaluationData);
+        savedEvaluation = await queryRunner.manager.save(Evaluation, existingEvaluation);
       } else {
         // 创建新记录
         const evaluation = this.evaluationsRepository.create(evaluationData);
@@ -969,12 +969,8 @@ export class EvaluationsService {
       let savedEvaluation;
       if (existingEvaluation) {
         // 更新现有记录
-        await queryRunner.manager.update(
-          Evaluation,
-          existingEvaluation.id,
-          evaluationData
-        );
-        savedEvaluation = { ...existingEvaluation, id: existingEvaluation.id };
+        Object.assign(existingEvaluation, evaluationData);
+        savedEvaluation = await queryRunner.manager.save(Evaluation, existingEvaluation);
       } else {
         // 创建新记录
         const evaluation = this.evaluationsRepository.create(evaluationData);
@@ -1088,7 +1084,7 @@ export class EvaluationsService {
         }
 
         // 更新现有评分
-        await queryRunner.manager.update(Evaluation, existingEvaluation.id, {
+        Object.assign(existingEvaluation, {
           score: totalScore,
           feedback: createDetailedBossEvaluationDto.boss_review || createDetailedBossEvaluationDto.overall_feedback,
           strengths: createDetailedBossEvaluationDto.strengths,
@@ -1097,6 +1093,7 @@ export class EvaluationsService {
           status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
+        await queryRunner.manager.save(Evaluation, existingEvaluation);
 
         // 更新参与者的上级评分状态
         await queryRunner.manager.update(AssessmentParticipant, participant.id, {
@@ -1361,7 +1358,8 @@ export class EvaluationsService {
       detailed_scores: updateEvaluationDraftDto.detailed_scores,
     };
 
-    await this.evaluationsRepository.update(evaluationId, updateData);
+    Object.assign(evaluation, updateData);
+    await this.evaluationsRepository.save(evaluation);
     return this.findOne(evaluationId);
   }
 
