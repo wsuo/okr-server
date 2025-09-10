@@ -2001,9 +2001,8 @@ export class EvaluationsService {
       }),
     ]);
 
-    if (!selfEvaluation && !leaderEvaluation) {
-      throw new NotFoundException("未找到该用户的评估记录");
-    }
+    // 如果没有任何评估记录，返回空数据结构而不是抛出错误
+    // 这样前端可以正常显示"暂无评估数据"的状态
 
     // 获取模板信息用于对比分析
     const template = await this.getEvaluationTemplate(assessmentId);
