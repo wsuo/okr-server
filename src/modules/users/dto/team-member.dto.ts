@@ -16,6 +16,9 @@ export class AssessmentInfoDto {
   @ApiProperty({ description: "考核结束时间", example: "2024-12-31T23:59:59Z" })
   end_date: Date;
 
+  @ApiProperty({ description: "考核截止时间", example: "2024-12-31T23:59:59Z" })
+  deadline: Date;
+
   @ApiProperty({ description: "考核周期", example: "2024年度" })
   period: string;
 }

@@ -395,6 +395,7 @@ export class UsersService {
           status: latestAssessment.status,
           start_date: latestAssessment.start_date,
           end_date: latestAssessment.end_date,
+          deadline: latestAssessment.deadline,
           period: latestAssessment.period,
         };
 
