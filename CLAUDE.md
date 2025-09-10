@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+线上服务器地址为47.239.124.157，用户名为 root，已经建立 ssh 密钥对连接
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Development Commands
