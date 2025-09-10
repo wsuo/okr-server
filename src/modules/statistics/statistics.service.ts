@@ -203,8 +203,9 @@ export class StatisticsService {
         "SUM(CASE WHEN p.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed",
       ])
       .from(Department, "d")
-      .leftJoin(User, "u", "u.department_id = d.id")
-      .leftJoin(AssessmentParticipant, "p", "p.user_id = u.id")
+      .leftJoin(User, "u", "u.department_id = d.id AND u.deleted_at IS NULL")
+      .leftJoin(AssessmentParticipant, "p", "p.user_id = u.id AND p.deleted_at IS NULL")
+      .where("d.deleted_at IS NULL")
       .groupBy("d.id")
       .orderBy("d.name")
       .getRawMany();

@@ -51,7 +51,7 @@ export class DepartmentsService {
 
   async findAll(): Promise<{ data: Department[] }> {
     const departments = await this.departmentsRepository.find({
-      where: { status: 1 },
+      where: { deleted_at: null as any },
       relations: ["parent", "children"],
       order: { sort_order: "ASC", id: "ASC" },
     });
