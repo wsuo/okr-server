@@ -1,5 +1,6 @@
-import { IsNumber, IsString, IsOptional, Min, Max } from "class-validator";
+import { IsNumber, IsString, IsOptional, Min, Max, IsObject, ValidateNested } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CreateBossEvaluationDto {
   @ApiProperty({ description: "考核ID" })
@@ -10,11 +11,27 @@ export class CreateBossEvaluationDto {
   @IsNumber()
   evaluatee_id: number;
 
-  @ApiProperty({ description: "评分", example: 88.0 })
+  @ApiProperty({ 
+    description: "星级分类评分", 
+    example: {
+      "boss_cat_work_performance": 4,
+      "boss_cat_professional_skill": 5,
+      "boss_cat_team_cooperation": 3,
+      "boss_cat_initiative": 4,
+      "boss_cat_development_potential": 4
+    },
+    required: false
+  })
+  @IsObject()
+  @IsOptional()
+  star_ratings?: { [category_id: string]: number };
+
+  @ApiProperty({ description: "传统评分(向后兼容)", example: 88.0, required: false })
   @IsNumber()
   @Min(0)
   @Max(100)
-  score: number;
+  @IsOptional()
+  score?: number;
 
   @ApiProperty({ description: "反馈意见", required: false })
   @IsString()
