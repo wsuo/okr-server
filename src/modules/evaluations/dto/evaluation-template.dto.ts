@@ -135,4 +135,10 @@ export class UserEvaluationTemplateDto extends EvaluationTemplateResponseDto {
     required: false 
   })
   boss_evaluation_note?: string;
+
+  @ApiProperty({ 
+    description: "老板星级评分配置", 
+    required: false 
+  })
+  boss_rating_config?: any;
 }

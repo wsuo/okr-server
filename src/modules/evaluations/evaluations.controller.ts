@@ -223,8 +223,19 @@ export class EvaluationsController {
     );
   }
 
+  @Get("boss-rating-template/:assessmentId/:userId")
+  @ApiOperation({ summary: "获取老板评分模板配置" })
+  @ApiResponse({ status: 200, description: "获取成功" })
+  @ApiResponse({ status: 404, description: "考核不存在或未启用星级评分" })
+  getBossRatingTemplate(
+    @Param("assessmentId") assessmentId: string,
+    @Param("userId") userId: string
+  ) {
+    return this.evaluationsService.getBossRatingTemplate(+assessmentId, +userId);
+  }
+
   @Post("boss")
-  @ApiOperation({ summary: "提交上级(Boss)评分" })
+  @ApiOperation({ summary: "提交上级(Boss)评分-支持星级模式" })
   @ApiResponse({ status: 201, description: "提交成功" })
   @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
   @ApiResponse({ status: 403, description: "权限不足，您不是该员工的上级" })

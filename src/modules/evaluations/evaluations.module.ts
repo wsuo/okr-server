@@ -7,6 +7,7 @@ import { AssessmentParticipant } from "../../entities/assessment-participant.ent
 import { User } from "../../entities/user.entity";
 import { EvaluationsController } from "./evaluations.controller";
 import { EvaluationsService } from "./evaluations.service";
+import { UsersModule } from "../users/users.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { EvaluationsService } from "./evaluations.service";
       AssessmentParticipant,
       User,
     ]),
+    UsersModule,
   ],
   controllers: [EvaluationsController],
   providers: [EvaluationsService],
