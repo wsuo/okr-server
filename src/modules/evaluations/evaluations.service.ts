@@ -43,6 +43,7 @@ import {
   ComparisonAnalysisDto,
   TimelineEventDto,
 } from "./dto/complete-evaluation.dto";
+import { UsersService } from "../users/users.service";
 
 @Injectable()
 export class EvaluationsService {
@@ -55,7 +56,8 @@ export class EvaluationsService {
     private participantsRepository: Repository<AssessmentParticipant>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    private dataSource: DataSource
+    private dataSource: DataSource,
+    private usersService: UsersService
   ) {}
 
   async findAll(query: QueryEvaluationsDto, currentUserId: number) {
@@ -221,6 +223,26 @@ export class EvaluationsService {
           self_submitted_at: new Date(),
         });
 
+        // 检查用户是否为领导，如果是则自动创建领导评分
+        const isLeader = await this.usersService.isUserALeader(evaluatorId);
+        if (isLeader) {
+          // 自动创建领导评分记录
+          await this.autoCreateLeaderEvaluation(
+            queryRunner,
+            createSelfEvaluationDto.assessment_id,
+            evaluatorId,
+            createSelfEvaluationDto.score,
+            existingEvaluation
+          );
+          
+          // 更新参与者的领导评分状态
+          await this.updateParticipantLeaderStatus(
+            queryRunner,
+            participant.id,
+            createSelfEvaluationDto.score
+          );
+        }
+
         // 检查是否需要计算最终分数
         await this.calculateFinalScoreIfReady(queryRunner, participant.id);
 
@@ -250,6 +272,26 @@ export class EvaluationsService {
         self_score: createSelfEvaluationDto.score,
         self_submitted_at: new Date(),
       });
+
+      // 检查用户是否为领导，如果是则自动创建领导评分
+      const isLeader = await this.usersService.isUserALeader(evaluatorId);
+      if (isLeader) {
+        // 自动创建领导评分记录
+        await this.autoCreateLeaderEvaluation(
+          queryRunner,
+          createSelfEvaluationDto.assessment_id,
+          evaluatorId,
+          createSelfEvaluationDto.score,
+          savedEvaluation
+        );
+        
+        // 更新参与者的领导评分状态
+        await this.updateParticipantLeaderStatus(
+          queryRunner,
+          participant.id,
+          createSelfEvaluationDto.score
+        );
+      }
 
       // 检查是否需要计算最终分数
       await this.calculateFinalScoreIfReady(queryRunner, participant.id);
@@ -406,8 +448,8 @@ export class EvaluationsService {
         throw new NotFoundException("考核不存在");
       }
 
-      if (assessment.status !== "active") {
-        throw new BadRequestException("只能对进行中的考核进行评分");
+      if (assessment.status !== "active" && assessment.status !== "completed") {
+        throw new BadRequestException("只能对进行中或已完成的考核进行评分");
       }
 
       // 验证被评估人是否为考核参与者
@@ -443,6 +485,35 @@ export class EvaluationsService {
         throw new BadRequestException("员工必须先完成自评和领导评分，才能进行老板评分");
       }
 
+      // 处理星级评分：计算总分和详细评分数据
+      let calculatedScore = createBossEvaluationDto.score;
+      let detailedScores = null;
+
+      if (createBossEvaluationDto.star_ratings) {
+        // 获取老板评分配置
+        const bossRatingConfig = templateConfig?.boss_rating_config;
+        if (!bossRatingConfig || !bossRatingConfig.enabled) {
+          throw new BadRequestException("当前模板未启用老板星级评分功能");
+        }
+
+        // 计算星级评分总分
+        const result = this.calculateStarRatingScore(
+          createBossEvaluationDto.star_ratings,
+          bossRatingConfig
+        );
+        calculatedScore = result.totalScore;
+        detailedScores = {
+          boss_star_ratings: result.detailedScores,
+          total_score: result.totalScore,
+          rating_mode: 'star_category'
+        };
+      }
+
+      // 验证评分数据
+      if (!calculatedScore && calculatedScore !== 0) {
+        throw new BadRequestException("必须提供评分或星级评分");
+      }
+
       // 检查是否已存在上级评分
       const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
         where: {
@@ -459,7 +530,11 @@ export class EvaluationsService {
 
         // 更新现有评分
         Object.assign(existingEvaluation, {
-          ...createBossEvaluationDto,
+          score: calculatedScore,
+          feedback: createBossEvaluationDto.feedback,
+          strengths: createBossEvaluationDto.strengths,
+          improvements: createBossEvaluationDto.improvements,
+          detailed_scores: detailedScores,
           status: EvaluationStatus.SUBMITTED,
           submitted_at: new Date(),
         });
@@ -468,7 +543,7 @@ export class EvaluationsService {
         // 更新参与者的上级评分状态
         await queryRunner.manager.update(AssessmentParticipant, participant.id, {
           boss_completed: 1,
-          boss_score: createBossEvaluationDto.score,
+          boss_score: calculatedScore,
           boss_submitted_at: new Date(),
         });
 
@@ -484,10 +559,11 @@ export class EvaluationsService {
         evaluator: { id: evaluatorId },
         evaluatee: { id: createBossEvaluationDto.evaluatee_id },
         type: EvaluationType.BOSS,
-        score: createBossEvaluationDto.score,
+        score: calculatedScore,
         feedback: createBossEvaluationDto.feedback,
         strengths: createBossEvaluationDto.strengths,
         improvements: createBossEvaluationDto.improvements,
+        detailed_scores: detailedScores,
         status: EvaluationStatus.SUBMITTED,
         submitted_at: new Date(),
       });
@@ -497,7 +573,7 @@ export class EvaluationsService {
       // 更新参与者的上级评分状态
       await queryRunner.manager.update(AssessmentParticipant, participant.id, {
         boss_completed: 1,
-        boss_score: createBossEvaluationDto.score,
+        boss_score: calculatedScore,
         boss_submitted_at: new Date(),
       });
 
@@ -511,6 +587,109 @@ export class EvaluationsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  /**
+   * 计算星级评分总分
+   */
+  private calculateStarRatingScore(
+    starRatings: { [category_id: string]: number },
+    bossRatingConfig: any
+  ): { totalScore: number; detailedScores: any } {
+    let totalScore = 0;
+    const detailedScores = {};
+
+    // 验证所有必填类别是否都已评分
+    const requiredCategories = bossRatingConfig.categories.filter(cat => cat.required !== false);
+    const providedCategories = Object.keys(starRatings);
+    
+    for (const category of requiredCategories) {
+      if (!providedCategories.includes(category.id)) {
+        throw new BadRequestException(`缺少必填类别评分: ${category.name}`);
+      }
+    }
+
+    // 计算各类别得分
+    for (const [categoryId, starRating] of Object.entries(starRatings)) {
+      const category = bossRatingConfig.categories.find(cat => cat.id === categoryId);
+      if (!category) {
+        throw new BadRequestException(`无效的评分类别: ${categoryId}`);
+      }
+
+      // 验证星级范围
+      if (starRating < 1 || starRating > bossRatingConfig.star_scale) {
+        throw new BadRequestException(
+          `类别 ${category.name} 的星级评分必须在 1-${bossRatingConfig.star_scale} 之间`
+        );
+      }
+
+      // 根据星级映射计算得分
+      const scoreMapping = category.star_to_score_mapping;
+      const categoryScore = scoreMapping[starRating.toString()];
+      
+      if (categoryScore === undefined) {
+        throw new BadRequestException(
+          `类别 ${category.name} 的 ${starRating} 星评分没有对应的分数映射`
+        );
+      }
+
+      detailedScores[categoryId] = {
+        category_name: category.name,
+        star_rating: starRating,
+        score: categoryScore,
+        weight: category.weight,
+        max_score: category.star_to_score_mapping['5'] || category.weight
+      };
+
+      totalScore += categoryScore;
+    }
+
+    // 验证总分不超过100分
+    if (totalScore > 100) {
+      throw new BadRequestException(`计算得出的总分 ${totalScore} 超过了100分上限`);
+    }
+
+    return {
+      totalScore: Math.round(totalScore * 100) / 100, // 保留两位小数
+      detailedScores
+    };
+  }
+
+  /**
+   * 获取老板评分模板配置
+   */
+  async getBossRatingTemplate(assessmentId: number, userId: number) {
+    // 获取考核和模板信息
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: ['template']
+    });
+
+    if (!assessment) {
+      throw new NotFoundException('考核不存在');
+    }
+
+    const templateConfig = assessment.template_config || assessment.template?.config;
+    const bossRatingConfig = templateConfig?.boss_rating_config;
+
+    if (!bossRatingConfig || !bossRatingConfig.enabled) {
+      throw new BadRequestException('当前模板未启用老板星级评分功能');
+    }
+
+    return {
+      assessment_id: assessmentId,
+      assessment_title: assessment.title,
+      template_id: assessment.template?.id,
+      template_name: assessment.template?.name,
+      boss_rating_config: {
+        enabled: bossRatingConfig.enabled,
+        rating_mode: bossRatingConfig.rating_mode,
+        star_scale: bossRatingConfig.star_scale,
+        categories: bossRatingConfig.categories,
+        star_standards: bossRatingConfig.star_standards,
+        total_weight: bossRatingConfig.total_weight
+      }
+    };
   }
 
   async update(
@@ -576,11 +755,11 @@ export class EvaluationsService {
       user: { id: In(subordinateIds) },
       self_completed: 1,
       leader_completed: 0,
-      assessment: { status: "active" },
+      assessment: { status: In(["active", "completed"]) },
     };
     
     if (assessmentId) {
-      participantsWhere.assessment = { id: assessmentId, status: "active" };
+      participantsWhere.assessment = { id: assessmentId, status: In(["active", "completed"]) };
     }
 
     const participants = await this.participantsRepository.find({
@@ -724,6 +903,9 @@ export class EvaluationsService {
 
     // 过滤模板类别
     let filteredCategories = baseTemplate.categories;
+    let bossRatingConfig = null;
+    let isBossSimplified = false;
+    let bossEvaluationNote = undefined;
     
     if (evaluationType === EvaluationType.SELF) {
       // 自评时过滤掉仅限领导的项目
@@ -731,8 +913,26 @@ export class EvaluationsService {
         (cat) => !cat.special_attributes?.leader_only
       );
     } else if (evaluationType === EvaluationType.BOSS) {
-      // 老板评分不需要详细的评分项，返回空数组
-      filteredCategories = [];
+      // 获取考核模板配置
+      const assessment = await this.assessmentsRepository.findOne({
+        where: { id: assessmentId },
+        relations: ['template'],
+      });
+      const templateConfig = assessment.template_config || assessment.template?.config;
+      
+      // 检查是否有boss星级评分配置
+      if (templateConfig?.boss_rating_config?.enabled) {
+        // 有星级配置，返回星级评分模板
+        filteredCategories = [];
+        bossRatingConfig = templateConfig.boss_rating_config;
+        isBossSimplified = false;
+        bossEvaluationNote = "请根据星级标准对各个维度进行评分";
+      } else {
+        // 没有星级配置，使用简化模式
+        filteredCategories = [];
+        isBossSimplified = true;
+        bossEvaluationNote = "老板评分采用简化模式，只需提供总分和简要评语即可";
+      }
     }
 
     // 检查是否已有评估记录
@@ -769,11 +969,11 @@ export class EvaluationsService {
           : "draft"
         : "not_started",
       // 标识是否为老板简化评分模式
-      is_boss_simplified: evaluationType === EvaluationType.BOSS,
+      is_boss_simplified: isBossSimplified,
       // 老板评分说明
-      boss_evaluation_note: evaluationType === EvaluationType.BOSS 
-        ? "老板评分采用简化模式，只需提供总分和简要评语即可" 
-        : undefined,
+      boss_evaluation_note: bossEvaluationNote,
+      // boss星级评分配置
+      boss_rating_config: bossRatingConfig,
     };
   }
 
@@ -869,6 +1069,26 @@ export class EvaluationsService {
         self_score: totalScore,
         self_submitted_at: new Date(),
       });
+
+      // 检查用户是否为领导，如果是则自动创建领导评分
+      const isLeader = await this.usersService.isUserALeader(evaluatorId);
+      if (isLeader) {
+        // 自动创建领导评分记录
+        await this.autoCreateLeaderEvaluation(
+          queryRunner,
+          createDetailedSelfEvaluationDto.assessment_id,
+          evaluatorId,
+          totalScore,
+          savedEvaluation
+        );
+        
+        // 更新参与者的领导评分状态
+        await this.updateParticipantLeaderStatus(
+          queryRunner,
+          participant.id,
+          totalScore
+        );
+      }
 
       // 检查是否需要计算最终分数
       await this.calculateFinalScoreIfReady(queryRunner, participant.id);
@@ -1031,8 +1251,8 @@ export class EvaluationsService {
         throw new NotFoundException("考核不存在");
       }
 
-      if (assessment.status !== "active") {
-        throw new BadRequestException("只能对进行中的考核进行评分");
+      if (assessment.status !== "active" && assessment.status !== "completed") {
+        throw new BadRequestException("只能对进行中或已完成的考核进行评分");
       }
 
       // 验证参与者
@@ -1719,7 +1939,9 @@ export class EvaluationsService {
       detailed_scores_with_template: evaluation.detailed_scores
         ? await this.enrichDetailedScoresWithTemplate(
             evaluation.assessment.id,
-            evaluation.detailed_scores
+            typeof evaluation.detailed_scores === 'string' 
+              ? JSON.parse(evaluation.detailed_scores)
+              : evaluation.detailed_scores
           )
         : null,
     };
@@ -1836,7 +2058,9 @@ export class EvaluationsService {
         detailed_scores: selfEvaluation.detailed_scores
           ? await this.enrichDetailedScoresWithTemplate(
               assessmentId,
-              selfEvaluation.detailed_scores
+              typeof selfEvaluation.detailed_scores === 'string' 
+                ? JSON.parse(selfEvaluation.detailed_scores)
+                : selfEvaluation.detailed_scores
             )
           : null,
       },
@@ -1850,7 +2074,9 @@ export class EvaluationsService {
         detailed_scores: leaderEvaluation.detailed_scores
           ? await this.enrichDetailedScoresWithTemplate(
               assessmentId,
-              leaderEvaluation.detailed_scores
+              typeof leaderEvaluation.detailed_scores === 'string' 
+                ? JSON.parse(leaderEvaluation.detailed_scores)
+                : leaderEvaluation.detailed_scores
             )
           : null,
       },
@@ -1864,7 +2090,9 @@ export class EvaluationsService {
         detailed_scores: bossEvaluation.detailed_scores
           ? await this.enrichDetailedScoresWithTemplate(
               assessmentId,
-              bossEvaluation.detailed_scores
+              typeof bossEvaluation.detailed_scores === 'string' 
+                ? JSON.parse(bossEvaluation.detailed_scores)
+                : bossEvaluation.detailed_scores
             )
           : null,
       } : null,
@@ -2022,7 +2250,9 @@ export class EvaluationsService {
             detailed_scores_with_template: selfEvaluation.detailed_scores
               ? await this.enrichDetailedScoresWithTemplate(
                   assessmentId,
-                  selfEvaluation.detailed_scores
+                  typeof selfEvaluation.detailed_scores === 'string' 
+                    ? JSON.parse(selfEvaluation.detailed_scores)
+                    : selfEvaluation.detailed_scores
                 )
               : null,
           }
@@ -2033,7 +2263,9 @@ export class EvaluationsService {
             detailed_scores_with_template: leaderEvaluation.detailed_scores
               ? await this.enrichDetailedScoresWithTemplate(
                   assessmentId,
-                  leaderEvaluation.detailed_scores
+                  typeof leaderEvaluation.detailed_scores === 'string' 
+                    ? JSON.parse(leaderEvaluation.detailed_scores)
+                    : leaderEvaluation.detailed_scores
                 )
               : null,
           }
@@ -2044,7 +2276,9 @@ export class EvaluationsService {
             detailed_scores_with_template: bossEvaluation.detailed_scores
               ? await this.enrichDetailedScoresWithTemplate(
                   assessmentId,
-                  bossEvaluation.detailed_scores
+                  typeof bossEvaluation.detailed_scores === 'string' 
+                    ? JSON.parse(bossEvaluation.detailed_scores)
+                    : bossEvaluation.detailed_scores
                 )
               : null,
           }
@@ -2205,7 +2439,7 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: userId },
       deleted_at: null,
-      assessment: { status: "active" },
+      assessment: { status: In(["active", "completed"]) },
     };
 
     if (assessmentId) {
@@ -2292,7 +2526,7 @@ export class EvaluationsService {
     const whereCondition: any = {
       user: { id: In(subordinates.map((s) => s.id)) },
       deleted_at: null,
-      assessment: { status: "active" },
+      assessment: { status: In(["active", "completed"]) },
     };
 
     if (assessmentId) {
@@ -2366,6 +2600,17 @@ export class EvaluationsService {
     detailedScores: any
   ): Promise<any> {
     const template = await this.getEvaluationTemplate(assessmentId);
+
+    // 处理boss星级评分格式
+    if (detailedScores && typeof detailedScores === 'object' && detailedScores.rating_mode === 'star_category') {
+      return detailedScores; // boss星级评分已经包含完整信息，直接返回
+    }
+
+    // 处理传统评分格式（数组）
+    if (!Array.isArray(detailedScores)) {
+      console.warn('detailedScores is not an array:', detailedScores);
+      return detailedScores; // 如果不是数组格式，直接返回原数据
+    }
 
     return detailedScores.map((categoryScore) => {
       const templateCategory = template.categories.find(
@@ -3063,10 +3308,25 @@ export class EvaluationsService {
         return; // 没有参与者则不需要结束
       }
 
-      // 检查是否所有参与者都已完成评分
-      const allCompleted = participants.every(participant => 
-        participant.self_completed === 1 && participant.leader_completed === 1
-      );
+      // 获取权重配置，根据模板类型判断是否需要boss评分
+      const weightConfig = await this.getWeightConfig(assessmentId);
+      const isTwoTierWeighted = weightConfig.boss_enabled && weightConfig.boss_weight > 0;
+      
+      // 根据模板类型智能检查所有参与者的评分完成状态
+      let allCompleted: boolean;
+      if (isTwoTierWeighted) {
+        // 两层加权模式：需要三维度都完成
+        allCompleted = participants.every(participant =>
+          participant.self_completed === 1 &&
+          participant.leader_completed === 1 &&
+          participant.boss_completed === 1
+        );
+      } else {
+        // 传统模式：只需要双维度完成
+        allCompleted = participants.every(participant =>
+          participant.self_completed === 1 && participant.leader_completed === 1
+        );
+      }
 
       if (allCompleted) {
         // 自动结束考核
@@ -3106,9 +3366,9 @@ export class EvaluationsService {
         return tasks;
       }
       
-      // 构建查询条件：查找启用两层加权模式的活跃考核
+      // 构建查询条件：查找启用两层加权模式的考核（包括活跃和已完成状态）
       const assessmentWhereCondition: any = {
-        status: 'active',
+        status: In(['active', 'completed']),
         deleted_at: null,
       };
       
@@ -3214,5 +3474,49 @@ export class EvaluationsService {
       console.error("Error in getBossEvaluationTasks:", error);
       return tasks;
     }
+  }
+
+  /**
+   * 为领导角色自动创建领导评分记录
+   * 将自评分数复制作为领导评分
+   */
+  private async autoCreateLeaderEvaluation(
+    queryRunner: any,
+    assessmentId: number,
+    evaluateeId: number,
+    selfScore: number,
+    selfEvaluation: Evaluation
+  ): Promise<Evaluation> {
+    // 创建领导评分记录（自动生成）
+    const leaderEvaluation = this.evaluationsRepository.create({
+      assessment: { id: assessmentId },
+      evaluator: { id: evaluateeId }, // 领导为自己评分
+      evaluatee: { id: evaluateeId },  // 评估对象也是自己
+      type: EvaluationType.LEADER,
+      score: selfScore, // 使用自评分数
+      feedback: `[系统自动生成] 基于领导自评结果: ${selfEvaluation.feedback || '无'}`,
+      strengths: selfEvaluation.strengths,
+      improvements: selfEvaluation.improvements,
+      detailed_scores: selfEvaluation.detailed_scores, // 复制详细评分
+      status: EvaluationStatus.SUBMITTED,
+      submitted_at: new Date(),
+    });
+
+    return await queryRunner.manager.save(leaderEvaluation);
+  }
+
+  /**
+   * 更新参与者的领导评分状态
+   */
+  private async updateParticipantLeaderStatus(
+    queryRunner: any,
+    participantId: number,
+    leaderScore: number
+  ): Promise<void> {
+    await queryRunner.manager.update(AssessmentParticipant, participantId, {
+      leader_completed: 1,
+      leader_score: leaderScore,
+      leader_submitted_at: new Date(),
+    });
   }
 }
