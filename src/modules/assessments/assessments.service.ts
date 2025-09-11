@@ -688,37 +688,52 @@ export class AssessmentsService {
     id: number,
     currentUserId: number
   ): Promise<Assessment> {
-    const assessment = await this.findOne(id, currentUserId);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // 检查状态：只能发布草稿状态的考核
-    if (assessment.status !== "draft") {
-      throw new BadRequestException("只能发布草稿状态的考核");
+    try {
+      const assessment = await this.findOne(id, currentUserId);
+
+      // 检查状态：只能发布草稿状态的考核
+      if (assessment.status !== "draft") {
+        throw new BadRequestException("只能发布草稿状态的考核");
+      }
+
+      // 检查权限：只有创建者可以发布
+      if (assessment.creator.id !== currentUserId) {
+        throw new BadRequestException("只有考核创建者可以发布考核");
+      }
+
+      // 发布前验证考核配置的完整性
+      await this.validateAssessmentForPublish(assessment);
+
+      // 获取完整的模板信息（包括配置）
+      const fullAssessment = await queryRunner.manager.findOne(Assessment, {
+        where: { id },
+        relations: ["template", "participants", "participants.user"],
+      });
+
+      if (!fullAssessment || !fullAssessment.template) {
+        throw new BadRequestException("考核模板信息不完整，无法发布");
+      }
+
+      // 创建模板配置快照并更新状态为active
+      fullAssessment.status = "active";
+      fullAssessment.template_config = fullAssessment.template.config;
+      await queryRunner.manager.save(Assessment, fullAssessment);
+
+      // 为领导参与者创建自评记录
+      await this.createLeaderSelfEvaluations(queryRunner, fullAssessment);
+
+      await queryRunner.commitTransaction();
+      return this.findOne(id, currentUserId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    // 检查权限：只有创建者可以发布
-    if (assessment.creator.id !== currentUserId) {
-      throw new BadRequestException("只有考核创建者可以发布考核");
-    }
-
-    // 发布前验证考核配置的完整性
-    await this.validateAssessmentForPublish(assessment);
-
-    // 获取完整的模板信息（包括配置）
-    const fullAssessment = await this.assessmentsRepository.findOne({
-      where: { id },
-      relations: ["template"],
-    });
-
-    if (!fullAssessment || !fullAssessment.template) {
-      throw new BadRequestException("考核模板信息不完整，无法发布");
-    }
-
-    // 创建模板配置快照并更新状态为active
-    fullAssessment.status = "active";
-    fullAssessment.template_config = fullAssessment.template.config;
-    await this.assessmentsRepository.save(fullAssessment);
-
-    return this.findOne(id, currentUserId);
   }
 
   async endAssessment(id: number): Promise<Assessment> {
@@ -834,6 +849,68 @@ export class AssessmentsService {
           "、"
         )}。请确保所有参与者完成评估后再结束考核。`
       );
+    }
+  }
+
+  /**
+   * 为领导参与者创建自评记录
+   * 领导的自评分数将同时用作自评和领导评分数
+   */
+  private async createLeaderSelfEvaluations(
+    queryRunner: any,
+    assessment: Assessment
+  ): Promise<void> {
+    // 获取所有参与者信息，包括他们的下属关系
+    const participants = await queryRunner.manager.find(AssessmentParticipant, {
+      where: { assessment: { id: assessment.id }, deleted_at: null },
+      relations: ["user"],
+    });
+
+    // 查找哪些参与者是领导（有下属的用户）
+    const participantUserIds = participants.map(p => p.user.id);
+    const leaders = await queryRunner.manager.find(User, {
+      where: { id: In(participantUserIds) },
+      relations: ["subordinates"],
+    });
+
+    console.log(`[DEBUG] 发布考核 ${assessment.id}，检查 ${participants.length} 个参与者中的领导`);
+
+    // 为每个是领导的参与者创建自评记录
+    for (const leader of leaders) {
+      // 检查这个用户是否有下属，如果有则认为是领导
+      const subordinates = await queryRunner.manager.find(User, {
+        where: { leader: { id: leader.id }, deleted_at: null },
+      });
+
+      if (subordinates.length > 0) {
+        console.log(`[DEBUG] 为领导 ${leader.name}(ID: ${leader.id}) 创建自评记录，该领导有 ${subordinates.length} 个下属`);
+
+        // 检查是否已经存在自评记录
+        const existingSelfEvaluation = await queryRunner.manager.findOne(Evaluation, {
+          where: {
+            assessment: { id: assessment.id },
+            evaluatee: { id: leader.id },
+            type: EvaluationType.SELF,
+          },
+        });
+
+        if (!existingSelfEvaluation) {
+          // 创建自评记录
+          const selfEvaluation = queryRunner.manager.create(Evaluation, {
+            assessment: assessment,
+            evaluator: { id: leader.id },
+            evaluatee: { id: leader.id },
+            type: EvaluationType.SELF,
+            score: 0,
+            status: EvaluationStatus.DRAFT,
+          });
+
+          await queryRunner.manager.save(Evaluation, selfEvaluation);
+          console.log(`[DEBUG] 已为领导 ${leader.name} 创建自评记录 ID: ${selfEvaluation.id}`);
+        } else {
+          console.log(`[DEBUG] 领导 ${leader.name} 已存在自评记录，跳过创建`);
+        }
+      }
     }
   }
 

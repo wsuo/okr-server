@@ -1004,4 +1004,17 @@ export class UsersService {
       summary,
     };
   }
+
+  /**
+   * 判断用户是否为领导（有下属的用户）
+   */
+  async isUserALeader(userId: number): Promise<boolean> {
+    const subordinateCount = await this.usersRepository.count({
+      where: { 
+        leader_id: userId, 
+        deleted_at: null as any 
+      }
+    });
+    return subordinateCount > 0;
+  }
 }
