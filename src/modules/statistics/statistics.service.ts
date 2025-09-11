@@ -33,9 +33,12 @@ export class StatisticsService {
     private dataSource: DataSource
   ) {}
 
-  async getDashboard() {
+  async getDashboard(query?: StatisticsQueryDto) {
     try {
-      this.logger.log('Fetching dashboard statistics');
+      this.logger.log(`Fetching dashboard statistics with query: ${JSON.stringify(query)}`);
+
+      // 构建时间过滤条件
+      const whereConditions = this.buildTimeConditions(query);
 
       const [
         totalUsers,
@@ -49,14 +52,14 @@ export class StatisticsService {
         scoreDistribution,
       ] = await Promise.all([
         this.usersRepository.count(),
-        this.assessmentsRepository.count({ where: { status: "active" } }),
-        this.assessmentsRepository.count({ where: { status: "completed" } }),
-        this.evaluationsRepository.count({ where: { status: EvaluationStatus.SUBMITTED } }),
+        this.getAssessmentCount("active", whereConditions),
+        this.getAssessmentCount("completed", whereConditions),
+        this.getEvaluationCount(whereConditions),
         this.templatesRepository.count({ where: { deleted_at: null } as any }),
-        this.getAverageScores(),
-        this.getDepartmentStatistics(),
-        this.getRecentAssessments(),
-        this.getScoreDistribution(),
+        this.getAverageScores(whereConditions),
+        this.getDepartmentStatistics(whereConditions),
+        this.getRecentAssessments(whereConditions),
+        this.getScoreDistribution(whereConditions),
       ]);
 
       this.logger.debug(`Dashboard statistics fetched successfully: ${totalUsers} users, ${activeAssessments} active assessments`);
@@ -189,8 +192,8 @@ export class StatisticsService {
     }
   }
 
-  async getDepartmentStatistics() {
-    const result = await this.dataSource
+  async getDepartmentStatistics(whereConditions: any = {}) {
+    const queryBuilder = this.dataSource
       .createQueryBuilder()
       .select([
         "d.id",
@@ -205,7 +208,21 @@ export class StatisticsService {
       .from(Department, "d")
       .leftJoin(User, "u", "u.department_id = d.id AND u.deleted_at IS NULL")
       .leftJoin(AssessmentParticipant, "p", "p.user_id = u.id AND p.deleted_at IS NULL")
-      .where("d.deleted_at IS NULL")
+      .leftJoin(Assessment, "a", "a.id = p.assessment_id")
+      .where("d.deleted_at IS NULL");
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("a.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("a.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    const result = await queryBuilder
       .groupBy("d.id")
       .orderBy("d.name")
       .getRawMany();
@@ -318,8 +335,8 @@ export class StatisticsService {
     return queryBuilder.getMany();
   }
 
-  private async getAverageScores() {
-    const result = await this.dataSource
+  private async getAverageScores(whereConditions: any = {}) {
+    const queryBuilder = this.dataSource
       .createQueryBuilder()
       .select([
         'AVG(CASE WHEN e.type = "self" THEN e.score END) as self_avg',
@@ -327,8 +344,21 @@ export class StatisticsService {
         "AVG(e.score) as overall_avg",
       ])
       .from(Evaluation, "e")
-      .where("e.status = :status", { status: "submitted" })
-      .getRawOne();
+      .leftJoin("e.assessment", "assessment")
+      .where("e.status = :status", { status: "submitted" });
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("assessment.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("assessment.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    const result = await queryBuilder.getRawOne();
 
     return {
       self: parseFloat(result.self_avg) || 0,
@@ -337,28 +367,39 @@ export class StatisticsService {
     };
   }
 
-  private async getRecentAssessments() {
-    return this.assessmentsRepository.find({
-      take: 10,
-      order: { created_at: "DESC" },
-      relations: ["creator"],
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        start_date: true,
-        end_date: true,
-        created_at: true,
-        creator: {
-          id: true,
-          name: true,
-        },
-      },
-    });
+  private async getRecentAssessments(whereConditions: any = {}) {
+    const queryBuilder = this.assessmentsRepository
+      .createQueryBuilder("assessment")
+      .leftJoinAndSelect("assessment.creator", "creator")
+      .select([
+        "assessment.id",
+        "assessment.title",
+        "assessment.status",
+        "assessment.start_date",
+        "assessment.end_date",
+        "assessment.created_at",
+        "creator.id",
+        "creator.name",
+      ])
+      .take(10)
+      .orderBy("assessment.created_at", "DESC");
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("assessment.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("assessment.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    return await queryBuilder.getMany();
   }
 
-  private async getScoreDistribution() {
-    const result = await this.dataSource
+  private async getScoreDistribution(whereConditions: any = {}) {
+    const queryBuilder = this.dataSource
       .createQueryBuilder()
       .select([
         "SUM(CASE WHEN e.score >= 90 THEN 1 ELSE 0 END) as excellent",
@@ -367,8 +408,21 @@ export class StatisticsService {
         "SUM(CASE WHEN e.score < 70 THEN 1 ELSE 0 END) as poor",
       ])
       .from(Evaluation, "e")
-      .where("e.status = :status", { status: "submitted" })
-      .getRawOne();
+      .leftJoin("e.assessment", "assessment")
+      .where("e.status = :status", { status: "submitted" });
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("assessment.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("assessment.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    const result = await queryBuilder.getRawOne();
 
     return {
       excellent: parseInt(result.excellent) || 0,
@@ -591,5 +645,67 @@ export class StatisticsService {
       this.logger.error(`Failed to fetch performance list: ${error.message}`, error.stack);
       throw new InternalServerErrorException('Failed to fetch performance list');
     }
+  }
+
+  /**
+   * 构建时间过滤条件
+   */
+  private buildTimeConditions(query?: StatisticsQueryDto) {
+    if (!query?.month) return {};
+
+    // 解析月份格式 YYYY-MM
+    const [year, month] = query.month.split('-');
+    const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+
+    return {
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+    };
+  }
+
+  /**
+   * 获取指定状态的考核数量（支持时间过滤）
+   */
+  private async getAssessmentCount(status: string, whereConditions: any = {}) {
+    const queryBuilder = this.assessmentsRepository
+      .createQueryBuilder("assessment")
+      .where("assessment.status = :status", { status });
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("assessment.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("assessment.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    return await queryBuilder.getCount();
+  }
+
+  /**
+   * 获取评估数量（支持时间过滤）
+   */
+  private async getEvaluationCount(whereConditions: any = {}) {
+    const queryBuilder = this.evaluationsRepository
+      .createQueryBuilder("evaluation")
+      .leftJoin("evaluation.assessment", "assessment")
+      .where("evaluation.status = :status", { status: EvaluationStatus.SUBMITTED });
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("assessment.start_date >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("assessment.end_date <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    return await queryBuilder.getCount();
   }
 }

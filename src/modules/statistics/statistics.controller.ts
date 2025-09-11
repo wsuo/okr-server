@@ -25,8 +25,8 @@ export class StatisticsController {
   @ApiResponse({ status: 200, description: "获取成功" })
   @ApiResponse({ status: 403, description: "权限不足" })
   @Roles("boss", "admin")
-  getDashboard(@CurrentUser() user: any) {
-    return this.statisticsService.getDashboard();
+  getDashboard(@Query() query: StatisticsQueryDto, @CurrentUser() user: any) {
+    return this.statisticsService.getDashboard(query);
   }
 
   @Get("assessments")

@@ -64,4 +64,13 @@ export class StatisticsQueryDto {
   @IsOptional()
   @IsIn(["department", "user", "assessment", "time"])
   group_by?: string;
+
+  @ApiProperty({
+    description: "查询月份 (YYYY-MM格式)",
+    required: false,
+    example: "2024-01",
+  })
+  @IsString()
+  @IsOptional()
+  month?: string;
 }
