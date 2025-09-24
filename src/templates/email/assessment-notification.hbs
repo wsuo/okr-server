@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考核通知</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .title {
+            color: #2c3e50;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .content {
+            margin: 20px 0;
+        }
+        .highlight {
+            background-color: #e8f5e8;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .assessment-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .info-item {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #555;
+            min-width: 100px;
+        }
+        .info-value {
+            color: #333;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+        .cta-button:hover {
+            background-color: #45a049;
+        }
+        .instructions {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 14px;
+        }
+        .note {
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo">OKR 绩效考核系统</div>
+        </div>
+
+        <div class="title">📋 考核通知</div>
+
+        <div class="content">
+            <p>尊敬的 <strong>{{userName}}</strong>，您好！</p>
+            
+            <p>您有一项新的绩效考核需要参与，请及时完成相关评分。</p>
+
+            <div class="assessment-info">
+                <div class="info-item">
+                    <span class="info-label">考核名称：</span>
+                    <span class="info-value"><strong>{{assessmentTitle}}</strong></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">考核期间：</span>
+                    <span class="info-value">{{period}}</span>
+                </div>
+                {{#if endDate}}
+                <div class="info-item">
+                    <span class="info-label">截止时间：</span>
+                    <span class="info-value">{{endDate}}</span>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="highlight">
+                <strong>📝 需要您完成的操作：</strong>
+                <ul>
+                    <li>登录系统进行自我评估</li>
+                    <li>如果您是管理者，还需要对下属进行评估</li>
+                    <li>请及时提交评估结果</li>
+                </ul>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{systemUrl}}" class="cta-button">立即前往评分</a>
+            </div>
+
+            <div class="instructions">
+                <strong>💡 操作说明：</strong>
+                <ol>
+                    <li>点击上方按钮或访问：<a href="{{systemUrl}}">{{systemUrl}}</a></li>
+                    <li>使用您的账号密码登录系统</li>
+                    <li>在考核管理页面找到对应的考核项目</li>
+                    <li>按照考核标准进行客观评估</li>
+                    <li>确认无误后提交评估结果</li>
+                </ol>
+            </div>
+
+            <p class="note">
+                如有任何疑问，请联系系统管理员或人事部门。<br>
+                感谢您的配合！
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>此邮件由 OKR 绩效考核系统自动发送，请勿直接回复。</p>
+            <p>© 2025 OKR 绩效考核系统</p>
+        </div>
+    </div>
+</body>
+</html>
