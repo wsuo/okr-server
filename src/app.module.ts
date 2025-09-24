@@ -19,6 +19,7 @@ import { OkrsModule } from "./modules/okrs/okrs.module";
 import { EvaluationsModule } from "./modules/evaluations/evaluations.module";
 import { TemplatesModule } from "./modules/templates/templates.module";
 import { StatisticsModule } from "./modules/statistics/statistics.module";
+import { MailModule } from "./modules/mail/mail.module";
 import { SeedModule } from "./database/seeds/seed.module";
 
 @Module({
@@ -75,6 +76,7 @@ import { SeedModule } from "./database/seeds/seed.module";
     EvaluationsModule,
     TemplatesModule,
     StatisticsModule,
+    MailModule,
     SeedModule,
   ],
 })
