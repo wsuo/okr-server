@@ -50,8 +50,9 @@ export class StatisticsService {
         departmentStats,
         recentAssessments,
         scoreDistribution,
+        participantStats,
       ] = await Promise.all([
-        this.usersRepository.count(),
+        this.getTotalUsersCount(whereConditions),
         this.getAssessmentCount("active", whereConditions),
         this.getAssessmentCount("completed", whereConditions),
         this.getEvaluationCount(whereConditions),
@@ -60,15 +61,17 @@ export class StatisticsService {
         this.getDepartmentStatistics(whereConditions),
         this.getRecentAssessments(whereConditions),
         this.getScoreDistribution(whereConditions),
+        this.getParticipantCompletionStats(whereConditions),
       ]);
 
       this.logger.debug(`Dashboard statistics fetched successfully: ${totalUsers} users, ${activeAssessments} active assessments`);
 
-      const totalAssessments = activeAssessments + completedAssessments;
-      const completionRate =
-        totalAssessments > 0
-          ? (completedAssessments / totalAssessments) * 100
-          : 0;
+      // 计算完成率：基于参与者的评估完成情况
+      const totalParticipants = participantStats.total_participants;
+      const completedParticipants = participantStats.completed_participants;
+      const completionRate = totalParticipants > 0 
+        ? (completedParticipants / totalParticipants) * 100 
+        : 0;
 
       return {
         overview: {
@@ -145,6 +148,9 @@ export class StatisticsService {
       this.logger.log(`Fetching user statistics with query: ${JSON.stringify(query)}`);
 
       const { department_id, user_id, assessment_id } = query;
+      
+      // 构建时间过滤条件
+      const whereConditions = this.buildTimeConditions(query);
 
       const queryBuilder = this.participantsRepository
         .createQueryBuilder("participant")
@@ -168,6 +174,18 @@ export class StatisticsService {
         .andWhere("(role.code != 'admin' OR role.code IS NULL)") // Exclude admin users
         .andWhere("(role.code != 'boss' OR role.code IS NULL)") // Exclude boss users
         .groupBy("user.id");
+
+      // 添加时间过滤条件
+      if (whereConditions.start_date) {
+        queryBuilder.andWhere("assessment.start_date >= :start_date", {
+          start_date: whereConditions.start_date,
+        });
+      }
+      if (whereConditions.end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", {
+          end_date: whereConditions.end_date,
+        });
+      }
 
       if (department_id) {
         queryBuilder.andWhere("department.id = :department_id", {
@@ -490,6 +508,9 @@ export class StatisticsService {
       this.logger.log(`Fetching performance list with query: ${JSON.stringify(query)}`);
 
       const { department_id, user_id } = query;
+      
+      // 构建时间过滤条件
+      const whereConditions = this.buildTimeConditions(query);
 
       // Step 1: Get all participants with their assessment data and actual evaluation scores
       const queryBuilder = this.participantsRepository
@@ -545,6 +566,18 @@ export class StatisticsService {
         .andWhere("assessment.deleted_at IS NULL")
         .andWhere("(role.code != 'admin' OR role.code IS NULL)") // Exclude admin users
         .andWhere("(role.code != 'boss' OR role.code IS NULL)"); // Exclude boss users
+
+      // 添加时间过滤条件
+      if (whereConditions.start_date) {
+        queryBuilder.andWhere("assessment.start_date >= :start_date", {
+          start_date: whereConditions.start_date,
+        });
+      }
+      if (whereConditions.end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", {
+          end_date: whereConditions.end_date,
+        });
+      }
 
       if (department_id) {
         queryBuilder.andWhere("department.id = :department_id", {
@@ -648,9 +681,77 @@ export class StatisticsService {
   }
 
   /**
+   * 获取总用户数量（支持时间过滤：参与了指定时间范围内考核的用户）
+   */
+  private async getTotalUsersCount(whereConditions: any = {}) {
+    // 如果没有时间过滤条件，返回所有活跃用户数量
+    if (!whereConditions.start_date && !whereConditions.end_date) {
+      return await this.usersRepository.count({
+        where: { deleted_at: null } as any
+      });
+    }
+
+    // 有时间过滤条件时，统计参与了指定时间范围内考核的用户数量
+    const queryBuilder = this.dataSource
+      .createQueryBuilder()
+      .select('COUNT(DISTINCT u.id) as user_count')
+      .from(User, 'u')
+      .leftJoin(AssessmentParticipant, 'p', 'p.user_id = u.id AND p.deleted_at IS NULL')
+      .leftJoin(Assessment, 'a', 'a.id = p.assessment_id AND a.deleted_at IS NULL')
+      .where('u.deleted_at IS NULL');
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere('a.start_date >= :start_date', {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere('a.end_date <= :end_date', {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    const result = await queryBuilder.getRawOne();
+    return parseInt(result.user_count) || 0;
+  }
+
+  /**
+   * 获取参与者完成统计（支持时间过滤）
+   */
+  private async getParticipantCompletionStats(whereConditions: any = {}) {
+    const queryBuilder = this.dataSource
+      .createQueryBuilder()
+      .select([
+        'COUNT(p.id) as total_participants',
+        'SUM(CASE WHEN (p.self_completed = 1 AND p.leader_completed = 1) THEN 1 ELSE 0 END) as completed_participants',
+      ])
+      .from(AssessmentParticipant, 'p')
+      .leftJoin(Assessment, 'a', 'a.id = p.assessment_id')
+      .where('p.deleted_at IS NULL')
+      .andWhere('a.deleted_at IS NULL');
+
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere('a.start_date >= :start_date', {
+        start_date: whereConditions.start_date,
+      });
+    }
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere('a.end_date <= :end_date', {
+        end_date: whereConditions.end_date,
+      });
+    }
+
+    const result = await queryBuilder.getRawOne();
+    return {
+      total_participants: parseInt(result.total_participants) || 0,
+      completed_participants: parseInt(result.completed_participants) || 0,
+    };
+  }
+
+  /**
    * 构建时间过滤条件
    */
-  private buildTimeConditions(query?: StatisticsQueryDto) {
+  buildTimeConditions(query?: StatisticsQueryDto) {
     if (!query?.month) return {};
 
     // 解析月份格式 YYYY-MM
@@ -687,7 +788,7 @@ export class StatisticsService {
   }
 
   /**
-   * 获取评估数量（支持时间过滤）
+   * 获取评估数量（支持时间过滤，基于评估提交时间）
    */
   private async getEvaluationCount(whereConditions: any = {}) {
     const queryBuilder = this.evaluationsRepository
@@ -695,15 +796,30 @@ export class StatisticsService {
       .leftJoin("evaluation.assessment", "assessment")
       .where("evaluation.status = :status", { status: EvaluationStatus.SUBMITTED });
 
-    if (whereConditions.start_date) {
-      queryBuilder.andWhere("assessment.start_date >= :start_date", {
-        start_date: whereConditions.start_date,
-      });
-    }
-    if (whereConditions.end_date) {
-      queryBuilder.andWhere("assessment.end_date <= :end_date", {
-        end_date: whereConditions.end_date,
-      });
+    // 优先使用评估的提交时间进行过滤，如果没有则使用考核时间
+    if (whereConditions.start_date && whereConditions.end_date) {
+      // 当有具体的时间范围时，使用评估提交时间
+      queryBuilder.andWhere(
+        "(evaluation.submitted_at >= :start_date AND evaluation.submitted_at <= :end_date_end) OR " +
+        "(evaluation.submitted_at IS NULL AND assessment.start_date >= :start_date AND assessment.end_date <= :end_date)",
+        {
+          start_date: whereConditions.start_date,
+          end_date: whereConditions.end_date,
+          end_date_end: whereConditions.end_date + ' 23:59:59',
+        }
+      );
+    } else {
+      // 回退到考核时间过滤
+      if (whereConditions.start_date) {
+        queryBuilder.andWhere("assessment.start_date >= :start_date", {
+          start_date: whereConditions.start_date,
+        });
+      }
+      if (whereConditions.end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", {
+          end_date: whereConditions.end_date,
+        });
+      }
     }
 
     return await queryBuilder.getCount();

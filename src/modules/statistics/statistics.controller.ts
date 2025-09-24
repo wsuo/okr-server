@@ -52,8 +52,9 @@ export class StatisticsController {
   @ApiResponse({ status: 200, description: "获取成功" })
   @ApiResponse({ status: 403, description: "权限不足" })
   @Roles("boss", "admin")
-  getDepartmentStatistics(@CurrentUser() user: any) {
-    return this.statisticsService.getDepartmentStatistics();
+  getDepartmentStatistics(@Query() query: StatisticsQueryDto, @CurrentUser() user: any) {
+    const whereConditions = this.statisticsService.buildTimeConditions(query);
+    return this.statisticsService.getDepartmentStatistics(whereConditions);
   }
 
   @Get("okrs")
