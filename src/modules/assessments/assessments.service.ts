@@ -17,6 +17,7 @@ import { UpdateAssessmentDto } from "./dto/update-assessment.dto";
 import { EditAssessmentDto } from "./dto/edit-assessment.dto";
 import { QueryAssessmentsDto } from "./dto/query-assessments.dto";
 import { ScoreCalculationService } from "./services/score-calculation.service";
+import { MailService } from "../mail/mail.service";
 
 @Injectable()
 export class AssessmentsService {
@@ -34,7 +35,8 @@ export class AssessmentsService {
     @InjectRepository(Evaluation)
     private evaluationsRepository: Repository<Evaluation>,
     private dataSource: DataSource,
-    private scoreCalculationService: ScoreCalculationService
+    private scoreCalculationService: ScoreCalculationService,
+    private mailService: MailService
   ) {}
 
   async findAll(query: QueryAssessmentsDto) {
@@ -727,6 +729,10 @@ export class AssessmentsService {
       await this.createLeaderSelfEvaluations(queryRunner, fullAssessment);
 
       await queryRunner.commitTransaction();
+
+      // 发送邮件通知给所有参与者
+      await this.sendAssessmentNotificationEmails(fullAssessment);
+
       return this.findOne(id, currentUserId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -911,6 +917,50 @@ export class AssessmentsService {
           console.log(`[DEBUG] 领导 ${leader.name} 已存在自评记录，跳过创建`);
         }
       }
+    }
+  }
+
+  /**
+   * 发送考核通知邮件给所有参与者
+   */
+  private async sendAssessmentNotificationEmails(
+    assessment: Assessment
+  ): Promise<void> {
+    try {
+      // 获取所有参与者信息
+      const participants = await this.participantsRepository.find({
+        where: { assessment: { id: assessment.id }, deleted_at: null },
+        relations: ["user"],
+      });
+
+      // 准备邮件数据
+      const emailRecipients = participants
+        .filter(participant => participant.user.email) // 过滤有邮箱的用户
+        .map(participant => ({
+          email: participant.user.email,
+          name: participant.user.name,
+        }));
+
+      if (emailRecipients.length === 0) {
+        console.log('[INFO] 没有参与者配置邮箱，跳过邮件通知');
+        return;
+      }
+
+      // 批量发送邮件通知
+      await this.mailService.sendBulkAssessmentNotifications(
+        emailRecipients,
+        {
+          assessmentTitle: assessment.title,
+          period: assessment.period,
+          endDate: assessment.end_date,
+          systemUrl: 'http://okr.gerenukagro.com/',
+        }
+      );
+
+      console.log(`[INFO] 考核 "${assessment.title}" 邮件通知发送完成，共 ${emailRecipients.length} 个接收者`);
+    } catch (error) {
+      console.error('[ERROR] 发送考核通知邮件失败:', error);
+      // 邮件发送失败不影响考核发布流程
     }
   }
 

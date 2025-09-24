@@ -11,6 +11,7 @@ import { AssessmentsController } from "./assessments.controller";
 import { AssessmentsService } from "./assessments.service";
 import { ScoreCalculationService } from "./services/score-calculation.service";
 import { ValidationService } from "./services/validation.service";
+import { MailModule } from "../mail/mail.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ValidationService } from "./services/validation.service";
       Evaluation,
       Okr,
     ]),
+    MailModule,
   ],
   controllers: [AssessmentsController],
   providers: [AssessmentsService, ScoreCalculationService, ValidationService],
