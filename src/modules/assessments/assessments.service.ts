@@ -723,7 +723,42 @@ export class AssessmentsService {
       // 创建模板配置快照并更新状态为active
       fullAssessment.status = "active";
       fullAssessment.template_config = fullAssessment.template.config;
+
+      // 验证模板配置快照是否成功保存，防止NULL值
+      if (!fullAssessment.template_config) {
+        throw new BadRequestException(
+          "模板配置无法读取，无法发布考核。请检查模板配置是否完整。"
+        );
+      }
+
+      // 验证模板配置中的scoring_rules字段
+      try {
+        const configData = typeof fullAssessment.template_config === "string"
+          ? JSON.parse(fullAssessment.template_config)
+          : fullAssessment.template_config;
+
+        if (!configData.scoring_rules) {
+          throw new BadRequestException(
+            "模板配置中缺少scoring_rules字段，无法发布考核。"
+          );
+        }
+      } catch (error) {
+        throw new BadRequestException(
+          `模板配置解析失败：${error.message}`
+        );
+      }
+
       await queryRunner.manager.save(Assessment, fullAssessment);
+
+      // 日志：记录成功保存的模板配置快照
+      console.log(
+        `✅ 考核${id}已成功保存模板配置快照，scoring_mode: ${
+          (typeof fullAssessment.template_config === "string"
+            ? JSON.parse(fullAssessment.template_config)
+            : fullAssessment.template_config
+          ).scoring_rules?.scoring_mode
+        }`
+      );
 
       // 为领导参与者创建自评记录
       await this.createLeaderSelfEvaluations(queryRunner, fullAssessment);
