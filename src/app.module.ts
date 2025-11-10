@@ -21,6 +21,7 @@ import { TemplatesModule } from "./modules/templates/templates.module";
 import { StatisticsModule } from "./modules/statistics/statistics.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { SeedModule } from "./database/seeds/seed.module";
+import { HealthModule } from "./modules/health/health.module";
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { SeedModule } from "./database/seeds/seed.module";
     StatisticsModule,
     MailModule,
     SeedModule,
+    HealthModule,
   ],
 })
 export class AppModule implements NestModule {
