@@ -27,7 +27,8 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/database.config.ts",
     "migration:boss": "node scripts/migrate-boss-evaluation.js",
     "seed:template": "ts-node scripts/init-template.ts",
-    "export:swagger": "ts-node scripts/export-swagger.ts"
+    "export:swagger": "ts-node scripts/export-swagger.ts",
+    "db:update:assessment23-template-snapshot": "node scripts/update-assessment-23-template-config.js"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
