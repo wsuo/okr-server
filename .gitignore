@@ -65,6 +65,6 @@ ecosystem.config.js
 
 # Claude Code related files
 CLAUDE.md
-CODEX.md
+AGENTS.md
 docs/
 .claude/

@@ -218,25 +218,34 @@ export class ValidationService {
 
     // 转换为预览格式
     const participantPreviews: ParticipantScorePreviewDto[] = scoreResults.map(
-      (result) => ({
-        userId: result.userId,
-        userName:
-          participants.find((p) => p.user.id === result.userId)?.user.name ||
-          "",
-        selfScore: result.selfScore,
-        leaderScore: result.leaderScore,
-        calculatedFinalScore: result.finalScore,
-        scoreBreakdown: result.scoreBreakdown.map((breakdown) => ({
-          category: breakdown.category,
-          categoryName: breakdown.categoryName,
-          categoryWeight: breakdown.categoryWeight,
-          selfWeight: 0.3, // 这里可以从模板配置中获取
-          leaderWeight: 0.7,
-          selfScore: breakdown.categorySelfScore,
-          leaderScore: breakdown.categoryLeaderScore,
-          categoryScore: breakdown.categoryFinalScore,
-        })),
-      })
+      (result) => {
+        const participant = participants.find(
+          (p) => p.user.id === result.userId
+        );
+
+        const finalScoreFromDb =
+          participant && participant.final_score != null
+            ? Number(participant.final_score)
+            : result.finalScore;
+
+        return {
+          userId: result.userId,
+          userName: participant?.user.name || "",
+          selfScore: result.selfScore,
+          leaderScore: result.leaderScore,
+          calculatedFinalScore: finalScoreFromDb,
+          scoreBreakdown: result.scoreBreakdown.map((breakdown) => ({
+            category: breakdown.category,
+            categoryName: breakdown.categoryName,
+            categoryWeight: breakdown.categoryWeight,
+            selfWeight: 0.3,
+            leaderWeight: 0.7,
+            selfScore: breakdown.categorySelfScore,
+            leaderScore: breakdown.categoryLeaderScore,
+            categoryScore: breakdown.categoryFinalScore,
+          })),
+        };
+      }
     );
 
     // 获取模板配置信息用于响应
