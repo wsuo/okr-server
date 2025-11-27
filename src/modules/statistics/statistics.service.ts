@@ -99,7 +99,8 @@ export class StatisticsService {
     try {
       this.logger.log(`Fetching assessment statistics with query: ${JSON.stringify(query)}`);
 
-      const { start_date, end_date, department_id } = query;
+      const { department_id } = query;
+      const whereConditions = this.buildTimeConditions(query);
 
       const queryBuilder = this.assessmentsRepository
         .createQueryBuilder("assessment")
@@ -120,13 +121,15 @@ export class StatisticsService {
         ])
         .groupBy("assessment.id");
 
-      if (start_date) {
+      if (whereConditions.start_date) {
         queryBuilder.andWhere("assessment.start_date >= :start_date", {
-          start_date,
+          start_date: whereConditions.start_date,
         });
       }
-      if (end_date) {
-        queryBuilder.andWhere("assessment.end_date <= :end_date", { end_date });
+      if (whereConditions.end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", {
+          end_date: whereConditions.end_date,
+        });
       }
       if (department_id) {
         queryBuilder.andWhere("department.id = :department_id", {
@@ -271,6 +274,7 @@ export class StatisticsService {
       this.logger.log(`Fetching OKR statistics with query: ${JSON.stringify(query)}`);
 
       const { department_id, user_id, assessment_id } = query;
+      const whereConditions = this.buildTimeConditions(query);
 
       const queryBuilder = this.okrsRepository
         .createQueryBuilder("okr")
@@ -305,6 +309,17 @@ export class StatisticsService {
         });
       }
 
+      if (whereConditions.start_date) {
+        queryBuilder.andWhere("assessment.start_date >= :start_date", {
+          start_date: whereConditions.start_date,
+        });
+      }
+      if (whereConditions.end_date) {
+        queryBuilder.andWhere("assessment.end_date <= :end_date", {
+          end_date: whereConditions.end_date,
+        });
+      }
+
       const result = await queryBuilder.getRawMany();
       this.logger.debug(`OKR statistics fetched: ${result.length} records`);
       return result;
@@ -315,7 +330,8 @@ export class StatisticsService {
   }
 
   async getEvaluationStatistics(query: StatisticsQueryDto) {
-    const { start_date, end_date, department_id } = query;
+    const { department_id } = query;
+    const whereConditions = this.buildTimeConditions(query);
 
     const queryBuilder = this.evaluationsRepository
       .createQueryBuilder("evaluation")
@@ -334,14 +350,14 @@ export class StatisticsService {
         "assessment.title as assessment_title",
       ]);
 
-    if (start_date) {
+    if (whereConditions.start_date) {
       queryBuilder.andWhere("evaluation.submitted_at >= :start_date", {
-        start_date,
+        start_date: whereConditions.start_date,
       });
     }
-    if (end_date) {
+    if (whereConditions.end_date) {
       queryBuilder.andWhere("evaluation.submitted_at <= :end_date", {
-        end_date,
+        end_date: whereConditions.end_date,
       });
     }
     if (department_id) {
@@ -451,12 +467,8 @@ export class StatisticsService {
   }
 
   async getPerformanceTrends(query: StatisticsQueryDto) {
-    const {
-      start_date,
-      end_date,
-      time_dimension = "month",
-      department_id,
-    } = query;
+    const { time_dimension = "month", department_id } = query;
+    const whereConditions = this.buildTimeConditions(query);
 
     let timeFormat = "%Y-%m";
     switch (time_dimension) {
@@ -490,11 +502,15 @@ export class StatisticsService {
       .groupBy("period")
       .orderBy("period");
 
-    if (start_date) {
-      queryBuilder.andWhere("e.submitted_at >= :start_date", { start_date });
+    if (whereConditions.start_date) {
+      queryBuilder.andWhere("e.submitted_at >= :start_date", {
+        start_date: whereConditions.start_date,
+      });
     }
-    if (end_date) {
-      queryBuilder.andWhere("e.submitted_at <= :end_date", { end_date });
+    if (whereConditions.end_date) {
+      queryBuilder.andWhere("e.submitted_at <= :end_date", {
+        end_date: whereConditions.end_date,
+      });
     }
     if (department_id) {
       queryBuilder.andWhere("d.id = :department_id", { department_id });
@@ -672,8 +688,13 @@ export class StatisticsService {
         };
       });
 
-      this.logger.debug(`Performance list fetched: ${transformedResult.length} unique employees`);
-      return transformedResult;
+      // 绩效列表按照最终得分从高到低排序，方便老板快速聚焦高绩效
+      const sortedResult = transformedResult.sort(
+        (a, b) => b.scores.final_score - a.scores.final_score
+      );
+
+      this.logger.debug(`Performance list fetched: ${sortedResult.length} unique employees`);
+      return sortedResult;
     } catch (error) {
       this.logger.error(`Failed to fetch performance list: ${error.message}`, error.stack);
       throw new InternalServerErrorException('Failed to fetch performance list');
@@ -752,17 +773,36 @@ export class StatisticsService {
    * 构建时间过滤条件
    */
   buildTimeConditions(query?: StatisticsQueryDto) {
-    if (!query?.month) return {};
+    if (!query) {
+      return {};
+    }
 
-    // 解析月份格式 YYYY-MM
-    const [year, month] = query.month.split('-');
-    const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-    const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+    if (query.month) {
+      const [yearStr, monthStr] = query.month.split('-');
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      if (isNaN(year) || isNaN(month)) {
+        return {};
+      }
 
-    return {
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
-    };
+      const pad = (value: number) => value.toString().padStart(2, "0");
+      const daysInMonth = new Date(year, month, 0).getDate();
+
+      return {
+        start_date: `${year}-${pad(month)}-01`,
+        end_date: `${year}-${pad(month)}-${pad(daysInMonth)}`,
+      };
+    }
+
+    const whereConditions: any = {};
+    if (query.start_date) {
+      whereConditions.start_date = query.start_date;
+    }
+    if (query.end_date) {
+      whereConditions.end_date = query.end_date;
+    }
+
+    return whereConditions;
   }
 
   /**
