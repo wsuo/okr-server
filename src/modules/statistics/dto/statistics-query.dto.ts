@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsNumber,
   IsIn,
+  Matches,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
@@ -72,5 +73,8 @@ export class StatisticsQueryDto {
   })
   @IsString()
   @IsOptional()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, {
+    message: "月份格式必须为 YYYY-MM",
+  })
   month?: string;
 }
