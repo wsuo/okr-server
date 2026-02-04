@@ -56,7 +56,9 @@ export class AssessmentsService {
         "COUNT(participants.id) as total_participants",
         "SUM(CASE WHEN participants.self_completed = 1 THEN 1 ELSE 0 END) as self_completed_count",
         "SUM(CASE WHEN participants.leader_completed = 1 THEN 1 ELSE 0 END) as leader_completed_count",
-        "SUM(CASE WHEN participants.self_completed = 1 AND participants.leader_completed = 1 THEN 1 ELSE 0 END) as fully_completed_count",
+        "SUM(CASE WHEN participants.boss_completed = 1 THEN 1 ELSE 0 END) as boss_completed_count",
+        "SUM(CASE WHEN participants.self_completed = 1 AND participants.leader_completed = 1 THEN 1 ELSE 0 END) as fully_completed_two_count",
+        "SUM(CASE WHEN participants.self_completed = 1 AND participants.leader_completed = 1 AND participants.boss_completed = 1 THEN 1 ELSE 0 END) as fully_completed_three_count",
       ])
       .where("assessment.deleted_at IS NULL");
 
@@ -95,17 +97,22 @@ export class AssessmentsService {
 
     const assessments = items.entities.map((assessment, index) => {
       const raw = items.raw[index];
+      const { bossRequired } = this.getBossRequirementFromAssessment(assessment);
+      const fullyCompletedCount = bossRequired
+        ? parseInt(raw.fully_completed_three_count) || 0
+        : parseInt(raw.fully_completed_two_count) || 0;
+
       return {
         ...assessment,
         statistics: {
           total_participants: parseInt(raw.total_participants) || 0,
           self_completed_count: parseInt(raw.self_completed_count) || 0,
           leader_completed_count: parseInt(raw.leader_completed_count) || 0,
-          fully_completed_count: parseInt(raw.fully_completed_count) || 0,
+          boss_completed_count: parseInt(raw.boss_completed_count) || 0,
+          fully_completed_count: fullyCompletedCount,
           completion_rate:
             raw.total_participants > 0
-              ? ((parseInt(raw.fully_completed_count) || 0) /
-                  parseInt(raw.total_participants)) *
+              ? (fullyCompletedCount / parseInt(raw.total_participants)) *
                 100
               : 0,
         },
@@ -144,6 +151,8 @@ export class AssessmentsService {
       (p) => !p.deleted_at
     );
 
+    const { bossRequired } = this.getBossRequirementFromAssessment(assessment);
+
     // 计算统计信息
     const statistics = {
       total_participants: participants.length,
@@ -156,7 +165,10 @@ export class AssessmentsService {
         (p) => p.boss_completed === 1
       ).length,
       fully_completed_count: participants.filter(
-        (p) => p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
+        (p) =>
+          bossRequired
+            ? p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
+            : p.self_completed === 1 && p.leader_completed === 1
       ).length,
       average_score: 0,
       highest_score: 0,
@@ -1243,7 +1255,7 @@ export class AssessmentsService {
       relations: ['roles'],
     });
 
-    const isAdmin = user?.roles.some(role => role.name === 'admin');
+    const isAdmin = user?.roles.some(role => role.code === 'admin');
     const isCreator = assessment.creator?.id === userId;
 
     if (!isAdmin && !isCreator) {
@@ -1266,13 +1278,209 @@ export class AssessmentsService {
       },
     });
 
-    const completedCount = participants.filter(p => 
-      p.self_completed === 1 && p.leader_completed === 1
+    const { bossRequired } = this.getBossRequirementFromAssessment(assessment as any);
+    const completedCount = participants.filter((p) =>
+      bossRequired
+        ? p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
+        : p.self_completed === 1 && p.leader_completed === 1
     ).length;
 
     console.log(`📋 考核手动结束 - 考核ID: ${id}, 参与者总数: ${participants.length}, 已完成评分: ${completedCount}`);
 
     return this.findOne(id);
+  }
+
+  /**
+   * 一键默认老板评分：
+   * - 前置条件：所有参与者都已完成自评 + 领导评
+   * - 行为：对未完成 boss 评分的参与者写入 boss 评分（默认 90，可传入），并计算 final_score
+   *
+   * 设计说明：
+   * 1) 为避免“逻辑写死”，final_score 权重从 assessment.template_config（快照）优先读取；
+   * 2) 为保证可追溯性，会写入/更新 evaluations(type='boss') 记录；
+   * 3) 若所有参与者三维度都完成，且考核仍是 active，则自动置为 completed（与现有自动结束逻辑一致）。
+   */
+  async applyDefaultBossScore(
+    assessmentId: number,
+    score: number | undefined,
+    operatorUserId: number
+  ): Promise<Assessment> {
+    const defaultScore = score ?? 90;
+    if (defaultScore < 0 || defaultScore > 100) {
+      throw new BadRequestException("老板评分必须在 0~100 之间");
+    }
+
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId, deleted_at: null },
+      relations: ["template"],
+    });
+    if (!assessment) {
+      throw new NotFoundException("考核不存在");
+    }
+    if (assessment.status !== "active" && assessment.status !== "completed") {
+      throw new BadRequestException("只能对进行中或已完成的考核进行默认评分");
+    }
+
+    const templateConfig = this.getTemplateConfigFromAssessment(assessment);
+    const scoringMode = templateConfig?.scoring_rules?.scoring_mode;
+    if (scoringMode !== "two_tier_weighted") {
+      throw new BadRequestException("当前考核模板未启用两层加权老板评分，不支持一键默认评分");
+    }
+
+    const weights = this.getThreeDimWeightsFromTemplateConfig(templateConfig);
+    if (weights.boss_weight <= 0) {
+      throw new BadRequestException("当前考核老板评分权重为 0，不支持一键默认评分");
+    }
+
+    // 确定写入的 evaluator_id：若操作者是 boss 则用自己；否则使用系统中的 boss 账号（避免把评分归到管理员名下）
+    const operator = await this.usersRepository.findOne({
+      where: { id: operatorUserId, deleted_at: null },
+      relations: ["roles"],
+    });
+    if (!operator) {
+      throw new BadRequestException("当前用户不存在或已被禁用");
+    }
+    const operatorIsBoss = operator.roles?.some((r) => r.code === "boss");
+    const evaluatorId = operatorIsBoss
+      ? operatorUserId
+      : await this.findDefaultBossUserId();
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const participants = await queryRunner.manager.find(AssessmentParticipant, {
+        where: { assessment: { id: assessmentId }, deleted_at: null },
+        relations: ["user"],
+      });
+
+      if (participants.length === 0) {
+        throw new BadRequestException("该考核没有参与者，无法默认评分");
+      }
+
+      const notReady = participants.filter(
+        (p) => p.self_completed !== 1 || p.leader_completed !== 1
+      );
+      if (notReady.length > 0) {
+        throw new BadRequestException(
+          `仍有 ${notReady.length} 人未完成自评或领导评，不能一键默认评分`
+        );
+      }
+
+      // 预取已有 boss 评分（用于处理“评分已写入但参与表未同步”等异常情况）
+      const existingBossEvals: Array<{
+        id: number;
+        evaluatee_id: number;
+        status: string;
+        score: number;
+        submitted_at: Date | null;
+      }> = await queryRunner.query(
+        `
+        SELECT id, evaluatee_id, status, score, submitted_at
+        FROM evaluations
+        WHERE assessment_id = ? AND type = 'boss'
+        `,
+        [assessmentId]
+      );
+      const bossEvalMap = new Map<number, (typeof existingBossEvals)[number]>();
+      for (const e of existingBossEvals) bossEvalMap.set(e.evaluatee_id, e);
+
+      const now = new Date();
+
+      for (const participant of participants) {
+        if (participant.boss_completed === 1) continue;
+
+        const evaluateeId = participant.user.id;
+        if (participant.self_score === null || participant.leader_score === null) {
+          throw new BadRequestException(
+            `参与者 ${participant.user?.name || evaluateeId} 缺少自评或领导评分，无法计算最终得分`
+          );
+        }
+        const existing = bossEvalMap.get(evaluateeId);
+
+        if (existing && existing.status === EvaluationStatus.SUBMITTED) {
+          // 同步参与表（不覆写已提交的真实评分）
+          await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+            boss_completed: 1,
+            boss_score: existing.score,
+            boss_submitted_at: existing.submitted_at || now,
+            final_score: Math.round(
+              (Number(participant.self_score) * weights.self_weight +
+                Number(participant.leader_score) * weights.leader_weight +
+                Number(existing.score) * weights.boss_weight) *
+                100
+            ) / 100,
+          });
+          continue;
+        }
+
+        // 需要写入/更新默认 boss 评分
+        if (existing) {
+          // 这里用原生 SQL 更新，避免 TypeORM update 对 relation 字段兼容性不一致
+          await queryRunner.query(
+            `
+            UPDATE evaluations
+            SET evaluator_id = ?, score = ?, status = ?, submitted_at = ?, updated_at = ?
+            WHERE id = ?
+            `,
+            [
+              evaluatorId,
+              defaultScore,
+              EvaluationStatus.SUBMITTED,
+              now,
+              now,
+              existing.id,
+            ]
+          );
+        } else {
+          const evalEntity = this.evaluationsRepository.create({
+            assessment: { id: assessmentId },
+            evaluator: { id: evaluatorId },
+            evaluatee: { id: evaluateeId },
+            type: EvaluationType.BOSS,
+            score: defaultScore,
+            status: EvaluationStatus.SUBMITTED,
+            submitted_at: now,
+          });
+          await queryRunner.manager.save(evalEntity);
+        }
+
+        await queryRunner.manager.update(AssessmentParticipant, participant.id, {
+          boss_completed: 1,
+          boss_score: defaultScore,
+          boss_submitted_at: now,
+          final_score: Math.round(
+            (Number(participant.self_score) * weights.self_weight +
+              Number(participant.leader_score) * weights.leader_weight +
+              defaultScore * weights.boss_weight) *
+              100
+          ) / 100,
+        });
+      }
+
+      // 若全员已完成三维度，且考核仍 active，则置为 completed（与现有自动结束保持一致）
+      const refreshed = await queryRunner.manager.find(AssessmentParticipant, {
+        where: { assessment: { id: assessmentId }, deleted_at: null },
+      });
+      const allDone = refreshed.every(
+        (p) => p.self_completed === 1 && p.leader_completed === 1 && p.boss_completed === 1
+      );
+      if (allDone && assessment.status === "active") {
+        await queryRunner.manager.update(Assessment, assessmentId, {
+          status: "completed",
+          updated_at: now,
+        });
+      }
+
+      await queryRunner.commitTransaction();
+      return this.findOne(assessmentId, operatorUserId);
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      throw e;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   /**
@@ -1284,5 +1492,83 @@ export class AssessmentsService {
     });
 
     return assessment?.status === "active";
+  }
+
+  private getTemplateConfigFromAssessment(assessment: Assessment): any {
+    const raw = (assessment as any).template_config || assessment.template?.config;
+    if (!raw) return null;
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  }
+
+  private getBossRequirementFromAssessment(assessment: Assessment): { bossRequired: boolean } {
+    try {
+      const templateConfig = this.getTemplateConfigFromAssessment(assessment);
+      const scoringRules = templateConfig?.scoring_rules;
+      if (!scoringRules) return { bossRequired: false };
+
+      // 当前系统的老板评分只在 two_tier_weighted 下生效；其他模式保持“双维度完成率”口径不变。
+      if (scoringRules.scoring_mode !== "two_tier_weighted") {
+        return { bossRequired: false };
+      }
+
+      if (scoringRules.two_tier_config) {
+        return { bossRequired: (scoringRules.two_tier_config.boss_weight || 0) > 0 };
+      }
+
+      return { bossRequired: false };
+    } catch {
+      return { bossRequired: false };
+    }
+  }
+
+  private getThreeDimWeightsFromTemplateConfig(templateConfig: any): {
+    self_weight: number;
+    leader_weight: number;
+    boss_weight: number;
+  } {
+    const scoringRules = templateConfig?.scoring_rules;
+    if (!scoringRules) {
+      // 兜底：保持与老逻辑一致（不会启用 boss）
+      return { self_weight: 0.4, leader_weight: 0.6, boss_weight: 0 };
+    }
+
+    if (scoringRules.scoring_mode === "two_tier_weighted" && scoringRules.two_tier_config) {
+      const cfg = scoringRules.two_tier_config;
+      const boss = (cfg.boss_weight || 0) / 100;
+      const employeeLeader = (cfg.employee_leader_weight || 0) / 100;
+      const selfIn = (cfg.self_weight_in_employee_leader || 0) / 100;
+      const leaderIn = (cfg.leader_weight_in_employee_leader || 0) / 100;
+      return {
+        boss_weight: boss,
+        self_weight: employeeLeader * selfIn,
+        leader_weight: employeeLeader * leaderIn,
+      };
+    }
+
+    const self = scoringRules.self_evaluation?.weight_in_final || 0.4;
+    const leader = scoringRules.leader_evaluation?.weight_in_final || 0.6;
+    const boss = scoringRules.boss_evaluation?.weight_in_final || 0;
+    const bossEnabled = scoringRules.boss_evaluation?.enabled !== false;
+    return {
+      self_weight: self,
+      leader_weight: leader,
+      boss_weight: bossEnabled ? boss : 0,
+    };
+  }
+
+  private async findDefaultBossUserId(): Promise<number> {
+    const boss = await this.usersRepository
+      .createQueryBuilder("u")
+      .leftJoinAndSelect("u.roles", "r")
+      .where("u.deleted_at IS NULL")
+      .andWhere("r.code = :code", { code: "boss" })
+      .orderBy("u.id", "ASC")
+      .getOne();
+
+    if (!boss) {
+      throw new BadRequestException("系统中未配置 Boss 账号，无法写入老板评分记录");
+    }
+
+    return boss.id;
   }
 }

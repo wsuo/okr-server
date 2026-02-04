@@ -227,6 +227,8 @@ export class EvaluationsController {
   @ApiOperation({ summary: "获取老板评分模板配置" })
   @ApiResponse({ status: 200, description: "获取成功" })
   @ApiResponse({ status: 404, description: "考核不存在或未启用星级评分" })
+  @Roles("boss")
+  @UseGuards(RolesGuard)
   getBossRatingTemplate(
     @Param("assessmentId") assessmentId: string,
     @Param("userId") userId: string
@@ -239,6 +241,8 @@ export class EvaluationsController {
   @ApiResponse({ status: 201, description: "提交成功" })
   @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
   @ApiResponse({ status: 403, description: "权限不足，您不是该员工的上级" })
+  @Roles("boss")
+  @UseGuards(RolesGuard)
   createBossEvaluation(
     @Body() createBossEvaluationDto: CreateBossEvaluationDto,
     @CurrentUser() user: any
@@ -254,6 +258,8 @@ export class EvaluationsController {
   @ApiResponse({ status: 201, description: "提交成功" })
   @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
   @ApiResponse({ status: 403, description: "权限不足，您不是该员工的上级" })
+  @Roles("boss")
+  @UseGuards(RolesGuard)
   createDetailedBossEvaluation(
     @Body()
     createDetailedBossEvaluationDto: CreateDetailedBossEvaluationDto,

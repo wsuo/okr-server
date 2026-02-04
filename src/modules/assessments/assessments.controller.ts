@@ -31,6 +31,9 @@ import {
   ScorePreviewResponseDto,
 } from "./dto/validation-response.dto";
 import { AssessmentStatusCheckResult } from "./dto/assessment-status.dto";
+import { DefaultBossScoreDto } from "./dto/default-boss-score.dto";
+import { Roles } from "../../common/decorators/roles.decorator";
+import { RolesGuard } from "../../common/guards/roles.guard";
 
 @ApiTags("考核管理")
 @ApiBearerAuth()
@@ -184,6 +187,21 @@ export class AssessmentsController {
   @ApiResponse({ status: 400, description: "只能发布草稿状态的考核" })
   publishAssessment(@Param("id") id: string, @CurrentUser() user: any) {
     return this.assessmentsService.publishAssessment(+id, user.id);
+  }
+
+  @Post(":id/default-boss-score")
+  @ApiOperation({ summary: "一键默认老板评分（需所有参与者完成自评+领导评）" })
+  @ApiResponse({ status: 200, description: "默认评分成功" })
+  @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
+  @ApiResponse({ status: 403, description: "没有权限执行此操作" })
+  @Roles("admin", "boss")
+  @UseGuards(RolesGuard)
+  defaultBossScore(
+    @Param("id") id: string,
+    @Body() dto: DefaultBossScoreDto,
+    @CurrentUser() user: any
+  ) {
+    return this.assessmentsService.applyDefaultBossScore(+id, dto?.score, user.id);
   }
 
   @Post(":id/end")
