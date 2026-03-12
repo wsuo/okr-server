@@ -1011,6 +1011,139 @@ export class AssessmentsService {
     }
   }
 
+  async sendReminderEmails(
+    assessmentId: number,
+    participantIds: number[],
+    _operatorId?: number
+  ) {
+    if (!Array.isArray(participantIds) || participantIds.length === 0) {
+      throw new BadRequestException("participant_ids 不能为空");
+    }
+
+    const assessment = await this.assessmentsRepository.findOne({
+      where: { id: assessmentId },
+      relations: [
+        "participants",
+        "participants.user",
+        "participants.user.leader",
+      ],
+    });
+
+    if (!assessment) {
+      throw new NotFoundException(`考核 ID ${assessmentId} 不存在`);
+    }
+
+    const participantMap = new Map(
+      (assessment.participants || [])
+        .filter((participant) => !participant.deleted_at)
+        .map((participant) => [participant.user?.id, participant] as const)
+    );
+
+    const recipients = new Map<
+      string,
+      {
+        email: string;
+        name: string;
+        pendingItems: Array<{ participantName: string; waitingFor: string }>;
+      }
+    >();
+    const failed: Array<{
+      participant_id: number;
+      participant_name: string;
+      reason: string;
+    }> = [];
+    const skipped: Array<{
+      participant_id: number;
+      participant_name: string;
+      reason: string;
+    }> = [];
+
+    for (const participantId of Array.from(new Set(participantIds))) {
+      const participant = participantMap.get(participantId);
+
+      if (!participant?.user) {
+        failed.push({
+          participant_id: participantId,
+          participant_name: "",
+          reason: "未找到对应参与人",
+        });
+        continue;
+      }
+
+      const participantName = participant.user.name;
+      const selfCompleted = participant.self_completed === 1;
+      const leaderCompleted = participant.leader_completed === 1;
+
+      if (selfCompleted && leaderCompleted) {
+        skipped.push({
+          participant_id: participantId,
+          participant_name: participantName,
+          reason: "该参与人已完成当前提交，无需提醒",
+        });
+        continue;
+      }
+
+      const waitingFor = selfCompleted ? "领导评分" : "员工自评";
+      const recipient = selfCompleted ? participant.user.leader : participant.user;
+
+      if (!recipient?.email) {
+        failed.push({
+          participant_id: participantId,
+          participant_name: participantName,
+          reason: "提醒对象未配置邮箱",
+        });
+        continue;
+      }
+
+      const key = `${recipient.email}::${recipient.name}`;
+      const current = recipients.get(key);
+
+      if (current) {
+        current.pendingItems.push({
+          participantName,
+          waitingFor,
+        });
+        continue;
+      }
+
+      recipients.set(key, {
+        email: recipient.email,
+        name: recipient.name,
+        pendingItems: [
+          {
+            participantName,
+            waitingFor,
+          },
+        ],
+      });
+    }
+
+    const recipientList = Array.from(recipients.values());
+
+    if (recipientList.length > 0) {
+      await this.mailService.sendBulkAssessmentReminders(recipientList, {
+        assessmentTitle: assessment.title,
+        period: assessment.period,
+        endDate: assessment.deadline,
+        systemUrl: "http://okr.gerenukagro.com/",
+      });
+    }
+
+    return {
+      assessment_id: assessment.id,
+      assessment_title: assessment.title,
+      sent: recipientList.map((recipient) => ({
+        recipient_name: recipient.name,
+        recipient_email: recipient.email,
+        pending_items: recipient.pendingItems.map(
+          (item) => `${item.participantName}（${item.waitingFor}）`
+        ),
+      })),
+      failed,
+      skipped,
+    };
+  }
+
   /**
    * 同步更新OKR状态和评分
    */

@@ -32,6 +32,7 @@ import {
 } from "./dto/validation-response.dto";
 import { AssessmentStatusCheckResult } from "./dto/assessment-status.dto";
 import { DefaultBossScoreDto } from "./dto/default-boss-score.dto";
+import { SendReminderDto } from "./dto/send-reminder.dto";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { RolesGuard } from "../../common/guards/roles.guard";
 
@@ -187,6 +188,25 @@ export class AssessmentsController {
   @ApiResponse({ status: 400, description: "只能发布草稿状态的考核" })
   publishAssessment(@Param("id") id: string, @CurrentUser() user: any) {
     return this.assessmentsService.publishAssessment(+id, user.id);
+  }
+
+  @Post(":id/reminder-emails")
+  @ApiOperation({ summary: "发送未提交提醒邮件" })
+  @ApiResponse({ status: 200, description: "发送完成" })
+  @ApiResponse({ status: 400, description: "参数错误或业务规则错误" })
+  @ApiResponse({ status: 403, description: "没有权限执行此操作" })
+  @Roles("admin", "boss")
+  @UseGuards(RolesGuard)
+  sendReminderEmails(
+    @Param("id") id: string,
+    @Body() dto: SendReminderDto,
+    @CurrentUser() user: any
+  ) {
+    return this.assessmentsService.sendReminderEmails(
+      +id,
+      dto.participant_ids,
+      user.id
+    );
   }
 
   @Post(":id/default-boss-score")

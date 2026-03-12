@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR 提交提醒</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #1f2937;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 24px;
+            background: #f3f4f6;
+        }
+        .email-container {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 32px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
+        .header {
+            border-bottom: 2px solid #dc2626;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+            color: #111827;
+        }
+        .title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #dc2626;
+            margin: 8px 0 0;
+        }
+        .panel {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin: 20px 0;
+        }
+        .label {
+            color: #6b7280;
+            font-weight: 600;
+            display: inline-block;
+            min-width: 96px;
+        }
+        .value {
+            color: #111827;
+        }
+        .warning {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 24px 0;
+        }
+        .cta {
+            text-align: center;
+            margin: 28px 0 20px;
+        }
+        .cta a {
+            display: inline-block;
+            background: #111827;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 12px 28px;
+            border-radius: 999px;
+            font-weight: 700;
+        }
+        .footer {
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo">OKR 绩效考核系统</div>
+            <div class="title">提交提醒</div>
+        </div>
+
+        <p>{{recipientName}}，您好：</p>
+        <p>以下 OKR 考核事项目前仍待您处理，请尽快完成提交：</p>
+
+        <div class="panel">
+            <div><span class="label">考核名称</span><span class="value">{{assessmentTitle}}</span></div>
+            <div><span class="label">考核周期</span><span class="value">{{period}}</span></div>
+            {{#if endDate}}
+            <div><span class="label">截止时间</span><span class="value">{{endDate}}</span></div>
+            {{/if}}
+        </div>
+
+        <div class="warning">
+            <strong>待处理事项：</strong>
+            <ul>
+                {{#each pendingItems}}
+                <li>{{participantName}}（{{waitingFor}}）</li>
+                {{/each}}
+            </ul>
+        </div>
+
+        <div class="cta">
+            <a href="{{systemUrl}}">进入 OKR 系统处理</a>
+        </div>
+
+        <p>如已完成，请忽略本邮件；如存在异常，请联系系统管理员。</p>
+
+        <div class="footer">
+            <p>此邮件由 OKR 绩效考核系统自动发送，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>
