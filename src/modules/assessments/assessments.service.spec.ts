@@ -195,4 +195,69 @@ describe("AssessmentsService reminder workflow", () => {
       },
     ]);
   });
+
+  it("passes custom reminder subject html and context to mail service", async () => {
+    const { service, assessmentsRepository, mailService } = createService();
+
+    (assessmentsRepository.findOne as any).mockResolvedValue({
+      id: 35,
+      title: "2026年02月OKR考核",
+      period: "2026-02",
+      deadline: new Date("2026-03-25T00:00:00.000Z"),
+      participants: [
+        {
+          deleted_at: null,
+          self_completed: 0,
+          leader_completed: 0,
+          user: {
+            id: 7,
+            name: "张轩",
+            email: "zhangxuan@example.com",
+            leader: null,
+          },
+        },
+      ],
+    });
+
+    await service.sendReminderEmails(
+      35,
+      [7],
+      1,
+      {
+        subject: "[自定义] OKR 提醒",
+        html: "<p>{{recipientName}} - {{customNote}}</p>",
+        context: {
+          customNote: "请尽快处理",
+        },
+      }
+    );
+
+    expect(mailService.sendBulkAssessmentReminders).toHaveBeenCalledWith(
+      [
+        {
+          email: "zhangxuan@example.com",
+          name: "张轩",
+          pendingItems: [
+            {
+              participantName: "张轩",
+              waitingFor: "员工自评",
+            },
+          ],
+        },
+      ],
+      {
+        assessmentTitle: "2026年02月OKR考核",
+        period: "2026-02",
+        endDate: new Date("2026-03-25T00:00:00.000Z"),
+        systemUrl: "http://okr.gerenukagro.com/",
+      },
+      {
+        subject: "[自定义] OKR 提醒",
+        html: "<p>{{recipientName}} - {{customNote}}</p>",
+        context: {
+          customNote: "请尽快处理",
+        },
+      }
+    );
+  });
 });

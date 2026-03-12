@@ -202,10 +202,16 @@ export class AssessmentsController {
     @Body() dto: SendReminderDto,
     @CurrentUser() user: any
   ) {
+    const { participant_ids, subject, html, context } = dto;
     return this.assessmentsService.sendReminderEmails(
       +id,
-      dto.participant_ids,
-      user.id
+      participant_ids,
+      user.id,
+      {
+        subject,
+        html,
+        context,
+      }
     );
   }
 

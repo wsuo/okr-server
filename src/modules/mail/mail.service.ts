@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import * as Handlebars from "handlebars";
 
 export interface AssessmentNotificationData {
   userName: string;
@@ -21,6 +22,12 @@ export interface AssessmentReminderData {
   endDate?: Date;
   systemUrl: string;
   pendingItems: AssessmentReminderItem[];
+}
+
+export interface ReminderMailOverrides {
+  subject?: string;
+  html?: string;
+  context?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -84,20 +91,34 @@ export class MailService {
   async sendAssessmentReminder(
     email: string,
     data: AssessmentReminderData,
+    overrides?: ReminderMailOverrides,
   ): Promise<boolean> {
     try {
+      const context = {
+        recipientName: data.recipientName,
+        assessmentTitle: data.assessmentTitle,
+        period: data.period,
+        endDate: data.endDate,
+        systemUrl: data.systemUrl,
+        pendingItems: data.pendingItems,
+        ...(overrides?.context ?? {}),
+      };
+      const subject = overrides?.subject || `[OKR系统] 提交提醒 - ${data.assessmentTitle}`;
+      const html = overrides?.html
+        ? Handlebars.compile(overrides.html)(context)
+        : undefined;
+
       await this.mailerService.sendMail({
         to: email,
-        subject: `[OKR系统] 提交提醒 - ${data.assessmentTitle}`,
-        template: "assessment-reminder",
-        context: {
-          recipientName: data.recipientName,
-          assessmentTitle: data.assessmentTitle,
-          period: data.period,
-          endDate: data.endDate,
-          systemUrl: data.systemUrl,
-          pendingItems: data.pendingItems,
-        },
+        subject,
+        ...(html
+          ? {
+              html,
+            }
+          : {
+              template: "assessment-reminder",
+              context,
+            }),
       });
 
       this.logger.log(`考核提醒邮件发送成功: ${email}`);
@@ -118,6 +139,7 @@ export class MailService {
       pendingItems: AssessmentReminderItem[];
     }>,
     data: Omit<AssessmentReminderData, "recipientName" | "pendingItems">,
+    overrides?: ReminderMailOverrides,
   ): Promise<void> {
     const promises = recipients
       .filter((recipient) => recipient.email)
@@ -126,7 +148,7 @@ export class MailService {
           ...data,
           recipientName: recipient.name,
           pendingItems: recipient.pendingItems,
-        })
+        }, overrides)
       );
 
     const results = await Promise.allSettled(promises);

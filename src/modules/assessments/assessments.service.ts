@@ -17,7 +17,7 @@ import { UpdateAssessmentDto } from "./dto/update-assessment.dto";
 import { EditAssessmentDto } from "./dto/edit-assessment.dto";
 import { QueryAssessmentsDto } from "./dto/query-assessments.dto";
 import { ScoreCalculationService } from "./services/score-calculation.service";
-import { MailService } from "../mail/mail.service";
+import { MailService, type ReminderMailOverrides } from "../mail/mail.service";
 
 @Injectable()
 export class AssessmentsService {
@@ -1014,7 +1014,8 @@ export class AssessmentsService {
   async sendReminderEmails(
     assessmentId: number,
     participantIds: number[],
-    _operatorId?: number
+    _operatorId?: number,
+    reminderOverrides?: ReminderMailOverrides
   ) {
     if (!Array.isArray(participantIds) || participantIds.length === 0) {
       throw new BadRequestException("participant_ids 不能为空");
@@ -1121,12 +1122,25 @@ export class AssessmentsService {
     const recipientList = Array.from(recipients.values());
 
     if (recipientList.length > 0) {
-      await this.mailService.sendBulkAssessmentReminders(recipientList, {
+      const reminderData = {
         assessmentTitle: assessment.title,
         period: assessment.period,
         endDate: assessment.deadline,
         systemUrl: "http://okr.gerenukagro.com/",
-      });
+      };
+
+      if (reminderOverrides) {
+        await this.mailService.sendBulkAssessmentReminders(
+          recipientList,
+          reminderData,
+          reminderOverrides
+        );
+      } else {
+        await this.mailService.sendBulkAssessmentReminders(
+          recipientList,
+          reminderData
+        );
+      }
     }
 
     return {
