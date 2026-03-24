@@ -92,14 +92,19 @@ export class EvaluationsController {
   })
   getMyTasks(
     @CurrentUser() user: any,
-    @Query("assessment_id") assessmentId?: string
+    @Query("assessment_id") assessmentId?: string,
+    @Query("type") taskType?: "self" | "leader" | "boss"
   ) {
     const parsedAssessmentId =
       assessmentId && assessmentId.trim() !== "" && !isNaN(Number(assessmentId))
         ? Number(assessmentId)
         : undefined;
 
-    return this.evaluationsService.getMyTasks(user.id, parsedAssessmentId);
+    return this.evaluationsService.getMyTasks(
+      user.id,
+      parsedAssessmentId,
+      taskType
+    );
   }
 
   @Get(":id")

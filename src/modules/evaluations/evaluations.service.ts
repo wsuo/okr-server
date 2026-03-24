@@ -1660,28 +1660,24 @@ export class EvaluationsService {
   // 任务和进度相关方法
   async getMyTasks(
     userId: number,
-    assessmentId?: number
+    assessmentId?: number,
+    taskType?: "self" | "leader" | "boss"
   ): Promise<EvaluationTaskDto[]> {
-    const tasks: EvaluationTaskDto[] = [];
+    const taskLoaders = {
+      self: () => this.getSelfEvaluationTasks(userId, assessmentId),
+      leader: () => this.getLeaderEvaluationTasks(userId, assessmentId),
+      boss: () => this.getBossEvaluationTasks(userId, assessmentId),
+    } as const;
+
+    const requestedTypes = taskType
+      ? [taskType]
+      : (["self", "leader", "boss"] as const);
 
     try {
-      // 获取自评任务
-      const selfTasks = await this.getSelfEvaluationTasks(userId, assessmentId);
-      tasks.push(...selfTasks);
-
-      // 获取领导评分任务
-      const leaderTasks = await this.getLeaderEvaluationTasks(
-        userId,
-        assessmentId
+      const taskGroups = await Promise.all(
+        requestedTypes.map((type) => taskLoaders[type]())
       );
-      tasks.push(...leaderTasks);
-
-      // 获取老板评分任务
-      const bossTasks = await this.getBossEvaluationTasks(
-        userId,
-        assessmentId
-      );
-      tasks.push(...bossTasks);
+      const tasks = taskGroups.flat();
 
       // 按截止时间排序
       return tasks.sort((a, b) => {
@@ -3405,6 +3401,13 @@ export class EvaluationsService {
         });
         
         for (const participant of participants) {
+          if (!participant.user) {
+            console.warn(
+              `Skip boss evaluation task for participant ${participant.id} in assessment ${assessment.id} because related user is unavailable`
+            );
+            continue;
+          }
+
           // 检查是否已经有老板评分记录
           const existingBossEvaluation = await this.evaluationsRepository.findOne({
             where: {
